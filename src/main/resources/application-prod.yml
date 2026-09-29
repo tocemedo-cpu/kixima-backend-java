@@ -1,0 +1,19 @@
+# Perfil de produção — NENHUM valor por omissão para segredos. Falha no
+# arranque se DATABASE_URL_JDBC/JWT_SECRET não estiverem definidos (ver
+# ProducaoStartupGuard).
+spring:
+  datasource:
+    url: ${DATABASE_URL_JDBC}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:5}
+
+kixima:
+  auth:
+    jwt-secret: ${JWT_SECRET}
+
+logging:
+  level:
+    # Mesma variável que config/logger.js (error|warn|info|debug; omissão "info").
+    ao.kixima: ${LOG_LEVEL:INFO}

@@ -1,0 +1,15 @@
+target/
+*.class
+.mvn/
+
+# Armazenamento local (StorageService, provider 'local') — disco efémero do
+# contentor, nunca comitado.
+uploads/
+
+# Chave privada JWS da AGT (dev local) — nunca comitar.
+# kixima.agt.jws-private-key-path aponta para aqui.
+src/main/resources/chave/*
+!src/main/resources/chave/.gitkeep
+
+.env
+.env.*

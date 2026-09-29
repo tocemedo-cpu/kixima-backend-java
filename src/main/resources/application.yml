@@ -1,0 +1,307 @@
+# Configuração base — comum a todos os perfis.
+spring:
+  application:
+    name: kixima-backend
+
+  datasource:
+    # Ligação explícita host/utilizador/senha (formato que o Spring espera).
+    # Ver README.md para a origem do schema desta base de dados.
+    url: ${DATABASE_URL_JDBC:jdbc:postgresql://localhost:5432/kixima_test}
+    username: ${DATABASE_USER:kixima}
+    password: ${DATABASE_PASSWORD:kixima}
+    hikari:
+      # Pool pequeno por omissão — ajustar com DB_POOL_MAX conforme o plano
+      # do Postgres em produção.
+      maximum-pool-size: ${DB_POOL_MAX:5}
+
+  jpa:
+    hibernate:
+      # ddl-auto: validate — o Hibernate NUNCA cria/altera o schema, só o lê e
+      # confirma que bate certo com as entidades. Ver README.md sobre quem é
+      # responsável por migrar o schema.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    # Baseline sobre o schema já existente — nunca tenta recriar o histórico
+    # anterior a este projecto. Desligado por omissão (ver README.md sobre a
+    # posse das migrações); ligar com FLYWAY_ENABLED=true quando este projecto
+    # passar a ser dono das migrações.
+    enabled: ${FLYWAY_ENABLED:false}
+    baseline-on-migrate: true
+    baseline-version: 0
+
+spring.servlet.multipart.max-file-size: 25MB
+spring.servlet.multipart.max-request-size: 120MB
+# 25MB é o maior limite por ficheiro entre os endpoints de upload (folha de
+# cálculo do carregamento em massa; media de produto 15MB, imagem 12MB,
+# documento 10MB); cada endpoint valida o seu próprio limite mais apertado
+# (ver catalog/UploadFilters). O tecto do pedido cobre uma ficha de produto
+# com a galeria e os documentos todos de uma vez.
+
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      # Sem isto, o Content-Type de respostas JSON sai sem "charset=utf-8" e o
+      # MockMvc (e alguns clientes) descodifica acentos mal.
+  port: ${PORT:4001}
+
+spring.mvc.throw-exception-if-no-handler-found: true
+spring.web.resources.add-mappings: false
+# As duas linhas acima ligam NoHandlerFoundException para rotas sem
+# handler — devolve 404 ROUTE_NOT_FOUND (ver GlobalExceptionHandler) em vez
+# da Whitelabel Error Page por omissão do Spring.
+
+kixima:
+  # Desligado no perfil de teste; trust-proxy = confia no cabeçalho
+  # X-Forwarded-For de um único proxy à frente (ajustar se o número de
+  # saltos até ao cliente for diferente em produção).
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    trust-proxy: true
+    api: ${API_RATE_LIMIT:600}
+    auth: ${AUTH_RATE_LIMIT:60}
+    forgot-password: ${FORGOT_PASSWORD_RATE_LIMIT:10}
+    sensitive: 30
+    chat: ${CHAT_RATE_LIMIT:60}
+    feedback: 10
+    candidaturas: 10
+  # Endereço público usado nos links de email (convite, recuperação de
+  # senha, ...). Vazio por omissão: cada chamador usa o endereço real do
+  # pedido (protocolo+host) — ver InviteService.baseUrl.
+  app-url: ${APP_URL:}
+  jobs:
+    # Todos DESLIGADOS por omissão — ver README.md: ligar cada um
+    # individualmente com KIXIMA_JOB_*_ENABLED=true antes de pôr este
+    # serviço em produção sozinho (sem isto, nada corre a retenção de dados,
+    # os avisos de expiração, os lembretes de 2FA, o robô de PO nem a cópia
+    # de segurança).
+    retencao:
+      enabled: ${KIXIMA_JOB_RETENCAO_ENABLED:false}
+    expiracao-apolices:
+      enabled: ${KIXIMA_JOB_EXPIRACAO_APOLICES_ENABLED:false}
+    expiracao-subscricoes:
+      enabled: ${KIXIMA_JOB_EXPIRACAO_SUBSCRICOES_ENABLED:false}
+    lembretes-2fa:
+      enabled: ${KIXIMA_JOB_LEMBRETES_2FA_ENABLED:false}
+    po-robot:
+      enabled: ${KIXIMA_JOB_PO_ROBOT_ENABLED:false}
+    backup:
+      enabled: ${KIXIMA_JOB_BACKUP_ENABLED:false}
+  backup:
+    # Mesmas variáveis que backupJob.js. BACKUP_CRON é opt-in (5 campos, como
+    # o node-cron: "0 3 * * *"); sem ela não se faz nada. DIRECT_URL é a
+    # ligação libpq para o pg_dump (o pooler não serve); sem ela deriva-se da
+    # ligação JDBC configurada.
+    cron: ${BACKUP_CRON:}
+    max-idade-horas: ${BACKUP_MAX_IDADE_HORAS:26}
+    direct-url: ${DIRECT_URL:${DATABASE_URL:}}
+  addons:
+    # Mesmas variáveis que addonService.js — preço configurável por ambiente, nunca hardcoded.
+    po-robot:
+      valor-usd: ${KIXIMA_PRECO_ADDON_PO_ROBOT_USD:200}
+      periodo: ${KIXIMA_PRECO_ADDON_PO_ROBOT_PERIODO:MENSAL}
+  auth:
+    jwt-secret: ${JWT_SECRET:}
+    jwt-expires-in: ${JWT_EXPIRES_IN:1d}
+    mfa-required-roles: ${MFA_REQUIRED_ROLES:ADMIN_SISTEMA,COMPANY_ADMIN}
+    mfa-enforce-from: ${MFA_ENFORCE_FROM:}
+  business:
+    payment-sla-days: ${PAYMENT_SLA_DAYS:7}
+    policy-expiry-alert-days: ${POLICY_EXPIRY_ALERT_DAYS:30}
+    # Câmbio USD→AOA com que se aferem limiares definidos em dólares (platformFeeService.fxRate).
+    usd-aoa-rate: ${KIXIMA_USD_AOA_RATE:900}
+  emis:
+    # Mesmas variáveis que multicaixaService.js — canal EMIS Multicaixa Express; sem elas o canal não existe.
+    base-url: ${EMIS_BASE_URL:}
+    pos-id: ${EMIS_POS_ID:}
+    token: ${EMIS_TOKEN:}
+    callback-url: ${EMIS_CALLBACK_URL:}
+  fees:
+    # Mesmas variáveis que platformFeeService.js — taxa da plataforma, em USD.
+    per-po-usd: ${KIXIMA_FEE_PER_PO_USD:8}
+    per-invoice-usd: ${KIXIMA_FEE_PER_INVOICE_USD:15}
+    threshold-usd: ${KIXIMA_FEE_THRESHOLD_USD:11500}
+    percent-above: ${KIXIMA_FEE_PERCENT_ABOVE:0.002}
+  tax:
+    iva-rate: ${IVA_RATE:0.14}
+    withholding-rate: ${WITHHOLDING_RATE:0.065}
+  agt:
+    jws-private-key-base64: ${AGT_JWS_PRIVATE_KEY_BASE64:}
+    # Ficheiro local de desenvolvimento (nunca comitado) — mesmo caminho
+    # relativo que o Node usa para src/chave/chavePrivada.pem, só que a
+    # partir da raiz de backend-java/. Fallback quando a variável de
+    # ambiente acima não está definida.
+    jws-private-key-path: ${AGT_JWS_PRIVATE_KEY_PATH:src/main/resources/chave/chavePrivada.pem}
+    software-validation-number: ${AGT_SOFTWARE_VALIDATION_NUMBER:}
+    software-id: ${AGT_SOFTWARE_ID:KIXIMA}
+    software-version: ${AGT_SOFTWARE_VERSION:1.0}
+    nif: ${AGT_NIF:}
+    establishment-number: ${AGT_ESTABLISHMENT_NUMBER:}
+    env: ${AGT_ENV:hml}
+    sandbox-username: ${AGT_SANDBOX_USERNAME:}
+    sandbox-password: ${AGT_SANDBOX_PASSWORD:}
+  anthropic:
+    # Recomendação em linguagem natural do Category Management — chamada real à API da Claude.
+    # Sem chave, a análise numérica sai na mesma e a recomendação vem null com o motivo explícito.
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ANTHROPIC_MODEL:claude-sonnet-5}
+  # Versão do programa declarada no SAF-T (ProductVersion) — `npm_package_version` no Node.
+  versao: ${KIXIMA_VERSAO:1.0}
+  faturacao:
+    # Identidade da KIXIMA como FABRICANTE do software certificado (ProductCompanyTaxID /
+    # SoftwareCertificateNumber no SAF-T) — distinta do NIF de cada fornecedor emitente.
+    nif: ${KIXIMA_NIF:}
+    certificado-agt: ${KIXIMA_CERTIFICADO_AGT:}
+  email:
+    # 'console' (log), 'smtp' (JavaMail, o equivalente ao nodemailer) ou 'brevo'/'brevo-api'
+    # (API HTTP do Brevo — porta 443, imune ao bloqueio de portas SMTP de saída no Render).
+    # Mesmas opções e mesmas variáveis de ambiente que config/env.js; um provider
+    # desconhecido cai no aviso "EMAIL_PROVIDER desconhecido" e nunca bloqueia quem chama.
+    provider: ${EMAIL_PROVIDER:console}
+    from: ${EMAIL_FROM:notificacoes@kixima.co.ao}
+    brevo-api-key: ${BREVO_API_KEY:}
+    smtp:
+      # Obrigatórias com EMAIL_PROVIDER=smtp: SMTP_HOST, SMTP_USER e SMTP_PASSWORD (a Prontidão diz
+      # o NOME das que faltam, nunca o valor). Porta: 465 = TLS direto; 587/2525 = STARTTLS.
+      host: ${SMTP_HOST:}
+      port: ${SMTP_PORT:587}
+      user: ${SMTP_USER:}
+      password: ${SMTP_PASSWORD:}
+  storage:
+    # Mesmas variáveis que config/env.js: 'local' (disco do contentor, apagado a cada
+    # deploy) ou 's3' (AWS S3 / Supabase Storage / R2 / MinIO, via SDK da AWS). Com 's3'
+    # e credenciais em falta cai para o disco local com aviso ALTO no log — nunca silencioso.
+    provider: ${STORAGE_PROVIDER:local}
+    bucket: ${STORAGE_BUCKET:}
+    # Credenciais S3 — obrigatórias com STORAGE_PROVIDER=s3; a Prontidão diz o NOME das que faltam, nunca o valor.
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    region: ${STORAGE_REGION:}
+    # Endpoint S3-compatível (Supabase: https://<ref>.supabase.co/storage/v1/s3); vazio = AWS.
+    endpoint: ${STORAGE_ENDPOINT:}
+    # URL público base para servir os ficheiros (CDN / bucket público); vazio = endpoint/bucket ou host AWS.
+    public-url: ${STORAGE_PUBLIC_URL:}
+    force-path-style: ${STORAGE_FORCE_PATH_STYLE:true}
+    # Bucket PRIVADO só para cópias de segurança — nunca o das imagens, que é público.
+    backup-bucket: ${STORAGE_BACKUP_BUCKET:}
+    local-dir: ${STORAGE_LOCAL_DIR:uploads}
+  db:
+    # Tecto de segurança para listas sem paginação própria — equivalente ao
+    # TETO_POR_OMISSAO/DB_MAX_ROWS de config/database.js, aplicado a TODAS as
+    # leituras feitas por repositórios (common/persistence/TectoDeLinhas):
+    # `limit N` no SQL quando não há paginação explícita, e um erro no log
+    # quando a lista volta cheia. Fora do tecto: reference_counters e o
+    # JdbcTemplate (o `$queryRaw` do Node também não passa pela extensão).
+    max-rows: ${DB_MAX_ROWS:1000}
+  sentry:
+    # DSN do Sentry do frontend, só para a CSP (connect-src) — csp.js usa o do
+    # backend quando este não está definido (é a mesma organização Sentry).
+    frontend-dsn: ${SENTRY_FRONTEND_DSN:}
+  plan:
+    # Mesmas variáveis de ambiente que backend/src/services/planService.js.
+    seat-price-cap-usd: ${KIXIMA_SEAT_PRICE_CAP_USD:100}
+    # PRECOS — o Pro é ANUAL por omissão de propósito (5.000/ano ≈ 417/mês é uma escada; 5.000/mês seria um penhasco).
+    precos:
+      base:
+        valor-usd: ${KIXIMA_PRECO_BASE_USD:100}
+        periodo: ${KIXIMA_PRECO_BASE_PERIODO:TRIMESTRAL}
+      core:
+        valor-usd: ${KIXIMA_PRECO_CORE_USD:100}
+        periodo: ${KIXIMA_PRECO_CORE_PERIODO:MENSAL}
+      pro:
+        valor-usd: ${KIXIMA_PRECO_PRO_USD:5000}
+        periodo: ${KIXIMA_PRECO_PRO_PERIODO:ANUAL}
+  banco:
+    # Dados bancários da KIXIMA para a transferência da subscrição (assinaturaService.dadosBancarios).
+    # Vêm do ambiente, não da base: mudam quando a KIXIMA muda de banco, não com um deploy.
+    titular: ${KIXIMA_BANCO_TITULAR:}
+    nome: ${KIXIMA_BANCO_NOME:}
+    iban: ${KIXIMA_BANCO_IBAN:}
+    swift: ${KIXIMA_BANCO_SWIFT:}
+    moeda: ${KIXIMA_BANCO_MOEDA:USD}
+  paypay:
+    # Mesmas variáveis que paypayService.js — canal PayPay; sem elas o canal não existe.
+    base-url: ${PAYPAY_BASE_URL:}
+    merchant-id: ${PAYPAY_MERCHANT_ID:}
+    token: ${PAYPAY_TOKEN:}
+    callback-url: ${PAYPAY_CALLBACK_URL:}
+  bancos:
+    # Mesmas variáveis que bancoGatewayService.js — adaptador genérico por confirmar contra a API real de cada banco.
+    bai:
+      base-url: ${BAI_BASE_URL:}
+      client-id: ${BAI_CLIENT_ID:}
+      client-secret: ${BAI_CLIENT_SECRET:}
+      callback-url: ${BAI_CALLBACK_URL:}
+    bfa:
+      base-url: ${BFA_BASE_URL:}
+      client-id: ${BFA_CLIENT_ID:}
+      client-secret: ${BFA_CLIENT_SECRET:}
+      callback-url: ${BFA_CALLBACK_URL:}
+    standard-bank-ao:
+      base-url: ${STANDARD_BANK_AO_BASE_URL:}
+      client-id: ${STANDARD_BANK_AO_CLIENT_ID:}
+      client-secret: ${STANDARD_BANK_AO_CLIENT_SECRET:}
+      callback-url: ${STANDARD_BANK_AO_CALLBACK_URL:}
+    grace-period-days: ${KIXIMA_GRACE_PERIOD_DAYS:7}
+    limiar-a-expirar-dias: 30
+  ops:
+    # Mesma variável que alertaOperacionalService.js — 1 aviso/hora por assunto.
+    alerta-intervalo-min: ${ALERTA_INTERVALO_MIN:60}
+  retencao:
+    # Mesmas variáveis que retencaoService.js — prazos operacionais (nunca os financeiros/legais).
+    notificacoes-dias: ${RETENCAO_NOTIFICACOES_DIAS:180}
+    convites-dias: ${RETENCAO_CONVITES_DIAS:90}
+    codigos-dias: ${RETENCAO_CODIGOS_DIAS:1}
+  erp:
+    # Mesma chave AES-256-GCM (32 bytes hex) que erpCrypto.js — só exigida
+    # quando se cifra/decifra uma configuração ERP real.
+    config-encryption-key: ${ERP_CONFIG_ENCRYPTION_KEY:}
+    # Microserviço kixima-integration-service (opcional) — sem isto, o
+    # ERP fica guardado mas não sincronizado, tal como no Node.
+    integration-url: ${INTEGRATION_URL:}
+    integration-admin-token: ${INTEGRATION_ADMIN_TOKEN:}
+  integration:
+    # Segredo HMAC-SHA256 do callback do microserviço (integrationRoutes.js).
+    # Sem ele, POST /api/integration/callback falha fechado (503).
+    callback-secret: ${KIXIMA_CALLBACK_SECRET:}
+  cors:
+    origins: ${CORS_ORIGINS:}
+  events:
+    # Mesmas variáveis que eventBus.js — integração ERP (RabbitMQ) OPCIONAL e
+    # não-bloqueante: sem RABBITMQ_URL nada é publicado e o Kixima funciona igual.
+    url: ${RABBITMQ_URL:}
+    exchange: ${RABBITMQ_EXCHANGE:kixima.events}
+
+sentry:
+  # Espelha config/sentry.js: inativo sem SENTRY_DSN (DSN vazio = SDK
+  # desligado, tudo no-op). Erros são sempre capturados; a amostragem de
+  # performance é 0 por omissão, como no Node.
+  dsn: ${SENTRY_DSN:}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0}
+  # `environment: config.env` — o perfil ativo, "development" sem perfil (como NODE_ENV).
+  environment: ${spring.profiles.active:development}
+  # O @sentry/node não envia PII por omissão — aqui também não.
+  send-default-pii: false
+  # O Node só reporta o que o errorHandler decide (ver GlobalExceptionHandler);
+  # sem isto o starter enviava também cada log de erro como evento.
+  logging:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  health:
+    rabbit:
+      # O health do Node não depende do RabbitMQ (é opcional) — aqui também não.
+      enabled: false

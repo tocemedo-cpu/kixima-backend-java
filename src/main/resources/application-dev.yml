@@ -1,0 +1,13 @@
+# Perfil de desenvolvimento local — base Postgres local (ver README.md
+# para como arrancar um Postgres local e aplicar o schema).
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kixima_test
+    username: kixima
+    password: kixima
+
+logging:
+  level:
+    # Mesma variável que config/logger.js (error|warn|info|debug); em dev a omissão é debug.
+    ao.kixima: ${LOG_LEVEL:DEBUG}
+    org.hibernate.SQL: DEBUG

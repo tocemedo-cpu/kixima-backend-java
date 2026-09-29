@@ -1,0 +1,30 @@
+# Perfil de testes JUnit — base Postgres local (a suite repõe o schema e os
+# dados de exemplo antes de correr; ver README.md).
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kixima_test
+    username: kixima
+    password: kixima
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+sentry:
+  # Como no Node (`config.sentry.dsn && !config.isTest`): nos testes o Sentry nunca liga, mesmo com SENTRY_DSN no ambiente.
+  enabled: false
+
+kixima:
+  # Como no Node (rateLimit.js desliga-se em NODE_ENV=test): a configuração real testa-se em RateLimitFilterTest.
+  rate-limit:
+    enabled: false
+  auth:
+    jwt-secret: teste-jwt-secret-com-pelo-menos-32-caracteres-000000
+  erp:
+    # 32 bytes em hex — só para os testes, nunca uma chave real.
+    config-encryption-key: "aab062c1f56d3cbf37c5e15cf2f33260887d9d5e6b177005142c363df9d6ea94"
+  integration:
+    # Só para os testes (erp-doa-approval.test.js); a falha fechada testa-se com a propriedade vazia.
+    callback-secret: segredo-teste-erp-doa
+  api-catalogo:
+    # Só para o teste do limite de taxa — em produção são 120 (a omissão em application.yml).
+    limite-por-minuto: 30

@@ -1,0 +1,2001 @@
+// KIXIMA — Schema de base de dados (Prisma / PostgreSQL)
+// Reflete a especificação funcional: due diligence, PO, pagamento garantido em 7 dias,
+// apólices (Fornecedor→KIXIMA e KIXIMA→Cliente), contratos/call-offs, notificações.
+//
+// ============================================================================
+// CÓPIA DE REFERÊNCIA, ESTÁTICA — snapshot copiado em 2026-09-29.
+// Este ficheiro NÃO é gerado nem lido por este projecto (não há Prisma aqui);
+// serve só de fonte de verdade para conferir nomes de tabela/coluna ao
+// escrever ou rever entidades JPA. As migrações reais e o Prisma Client
+// vivem noutro repositório. Ver README.md, secção "Base de dados e schema",
+// para quem é dono das migrações e como manter este ficheiro actualizado.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // App: pooler de TRANSAÇÃO do Supabase (porta 6543, pgbouncer=true).
+  url       = env("DATABASE_URL")
+  // Migrações/DDL: pooler de SESSÃO (porta 5432, mesmo host `...pooler.supabase.com`,
+  // IPv4). NÃO usar o host direto `db.<ref>.supabase.co` (só IPv6 → P1001). Em
+  // dev/teste local pode ser igual ao DATABASE_URL (Postgres local direto).
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Empresas e utilizadores
+// ---------------------------------------------------------------------------
+
+enum CompanyType {
+  CLIENTE
+  FORNECEDOR
+}
+
+// Dimensão da empresa (critério MPME angolano, Lei n.º 30/11): decide o plano
+// elegível. GRANDE exige o plano PRO.
+enum CompanySize {
+  MICRO
+  PEQUENA
+  MEDIA
+  GRANDE
+}
+
+// Plano de subscrição. BASICO: versão essencial, taxa de acesso por utilizador.
+// PRO: obrigatório para grandes empresas — inclui integração com ERPs externos
+// (SAP, AS400, Ariba, Maximo, Oracle e outros).
+// Chave de API do catálogo (plano Pro).
+//
+// É uma credencial que contorna o login E a verificação em dois passos: um
+// sistema não consegue introduzir um código de 6 dígitos. Por isso o seu
+// ALCANCE é estritamente o catálogo da própria empresa — não toca em ordens,
+// pagamentos, utilizadores nem documentos —, guarda-se em hash, mostra-se uma
+// única vez e revoga-se sem apagar o histórico de uso.
+model ApiKey {
+  id         String    @id @default(uuid())
+  companyId  String    @map("company_id")
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Nome dado por quem a criou ("ERP da produção"), para saber o que revogar.
+  nome       String
+  // Prefixo visível (kxm_a1b2…) — permite identificar a chave sem a guardar.
+  prefixo    String    @unique
+  hash       String
+  criadaPor  String?   @map("criada_por")
+  ultimoUso  DateTime? @map("ultimo_uso")
+  revogadaEm DateTime? @map("revogada_em")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([companyId])
+  @@map("api_keys")
+}
+
+enum CompanyPlan {
+  BASE
+  CORE
+  PRO
+  // Plano do modelo de dois degraus. As empresas foram migradas para CORE; o
+  // valor fica no enum porque removê-lo obrigaria a recriar o tipo, e o código
+  // trata-o como sinónimo de CORE.
+  BASICO
+}
+
+// Cobrança de subscrição — o pedido de plano e o seu pagamento.
+//
+// NÃO HÁ GATEWAY, e isso não é uma lacuna: em Angola o B2B paga-se por
+// transferência bancária. A plataforma já cobra as faturas assim — comprovativo
+// carregado e confirmado por quem recebe — e a subscrição segue exatamente o
+// mesmo caminho. Inventar um botão "pagar com cartão" que ninguém consegue usar
+// seria pior do que não ter botão nenhum.
+//
+// O PLANO SÓ MUDA NA CONFIRMAÇÃO. Entre pedir e confirmar não muda nada: quem
+// pedisse o Pro e ficasse logo com o Pro tinha o plano de graça enquanto a
+// transferência não chegasse — ou nunca chegasse.
+enum CobrancaStatus {
+  PENDENTE // emitida, à espera de pagamento
+  COMPROVATIVO_ENVIADO // empresa carregou o comprovativo, aguarda confirmação
+  CONFIRMADA // KIXIMA confirmou: o plano muda AQUI
+  CANCELADA
+}
+
+// Por onde uma cobrança de subscrição é paga. TRANSFERENCIA_MANUAL é o único
+// caminho verificado (comprovativo + confirmação humana, ver acima); os
+// outros quatro só existem para os planos BASE e CORE (o PRO continua
+// exclusivamente manual) e cada um está implementado contra a forma provável
+// da respetiva API — sem credenciais nenhuma delas funciona, e nenhuma finge
+// que funciona (ver assinaturaService.js/multicaixaService.js/
+// paypayService.js/bancoGatewayService.js: exigirConfiguracao() lança em vez
+// de simular sucesso).
+enum CanalCobranca {
+  TRANSFERENCIA_MANUAL
+  EMIS_MULTICAIXA
+  PAYPAY
+  BAI
+  BFA
+  STANDARD_BANK_ANGOLA
+}
+
+model PlanoCobranca {
+  id         String  @id @default(uuid())
+  referencia String  @unique // SUB-2026-000001
+  companyId  String  @map("company_id")
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  planoAtual CompanyPlan @map("plano_atual")
+  planoNovo  CompanyPlan @map("plano_novo")
+  // Preço GRAVADO no momento do pedido. Se a tabela mudar amanhã, esta cobrança
+  // continua a valer o que foi acordado — uma cobrança que muda de valor
+  // sozinha não é uma cobrança.
+  valorUsd   Decimal     @map("valor_usd") @db.Decimal(12, 2)
+  periodo    String // MENSAL | TRIMESTRAL | ANUAL
+  meses      Int
+
+  status          CobrancaStatus @default(PENDENTE)
+  comprovativoUrl String?        @map("comprovativo_url")
+  submetidoEm     DateTime?      @map("submetido_em")
+  confirmadaPor   String?        @map("confirmada_por")
+  confirmadaEm    DateTime?      @map("confirmada_em")
+  // Até quando a subscrição fica paga, calculado na confirmação.
+  validoAte       DateTime?      @map("valido_ate")
+  notas           String?
+
+  // Canal de pagamento automático (EMIS/PayPay/banco) — ver CanalCobranca.
+  // `referenciaExterna` é o identificador da transação NO GATEWAY, guardado
+  // ao iniciar o pagamento e usado para verificar o callback contra a fonte
+  // (nunca se confia no que o callback afirma, ver os adaptadores). Nula
+  // sempre que o canal é TRANSFERENCIA_MANUAL.
+  canal             CanalCobranca @default(TRANSFERENCIA_MANUAL)
+  referenciaExterna String?       @map("referencia_externa")
+  telemovel         String? // usado pelo EMIS/PayPay para pedir o pagamento ao telemóvel
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@index([status])
+  @@index([canal, referenciaExterna])
+  @@map("plano_cobrancas")
+}
+
+// ---------------------------------------------------------------------------
+// Add-ons — funcionalidades PRO pagas à parte do plano. O primeiro é o
+// Automatic PO Robot. Mesma separação de Company.plan/PlanoCobranca: o
+// add-on só fica ATIVO na CONFIRMAÇÃO da cobrança, nunca no pedido (ver
+// assinaturaService.aplicarConfirmacao — addonService.js segue o mesmo molde).
+// ---------------------------------------------------------------------------
+enum CompanyAddonStatus {
+  INATIVO
+  ATIVO
+}
+
+model CompanyAddon {
+  id          String             @id @default(uuid())
+  companyId   String             @map("company_id")
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  addonKey    String             @map("addon_key") // ex.: "PO_ROBOT"
+  status      CompanyAddonStatus @default(INATIVO)
+  activatedAt DateTime?          @map("activated_at")
+  // Cópia de AddonCobranca.validoAte da última confirmação — sem isto, o
+  // add-on ficava ATIVO para sempre depois de uma única mensalidade paga
+  // (nada voltava a ler a validade da cobrança). NUNCA PERSISTIDO como
+  // status: verificado a cada leitura em assertAddon()/estado(), mesmo
+  // princípio de planService.estadoSubscricao (Company.planoValidoAte).
+  validoAte   DateTime?          @map("valido_ate")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  @@unique([companyId, addonKey])
+  @@map("company_addons")
+}
+
+// Cobrança de um add-on — espelha PlanoCobranca campo a campo (mesmo
+// mecanismo pedir → comprovativo → confirmar, mesmos canais automáticos e
+// mesma regra "só muda na confirmação").
+model AddonCobranca {
+  id         String  @id @default(uuid())
+  referencia String  @unique // ADD-2026-000001
+  companyId  String  @map("company_id")
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  addonKey String  @map("addon_key")
+  valorUsd Decimal @map("valor_usd") @db.Decimal(12, 2)
+  periodo  String // MENSAL | TRIMESTRAL | ANUAL
+  meses    Int
+
+  status          CobrancaStatus @default(PENDENTE)
+  comprovativoUrl String?        @map("comprovativo_url")
+  submetidoEm     DateTime?      @map("submetido_em")
+  confirmadaPor   String?        @map("confirmada_por")
+  confirmadaEm    DateTime?      @map("confirmada_em")
+  validoAte       DateTime?      @map("valido_ate")
+  notas           String?
+
+  canal             CanalCobranca @default(TRANSFERENCIA_MANUAL)
+  referenciaExterna String?       @map("referencia_externa")
+  telemovel         String?
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@index([status])
+  @@index([canal, referenciaExterna])
+  @@map("addon_cobrancas")
+}
+
+enum CompanyStatus {
+  PENDENTE // aguarda due diligence
+  APROVADA
+  REJEITADA
+  SUSPENSA
+}
+
+// Documentos exigidos no cadastro (secção 4.1). Operadora/cliente: certidão
+// comercial + alvará comercial. Fornecedora: alvará comercial + licença ANPG +
+// certidão comercial.
+enum DocumentType {
+  CERTIDAO_COMERCIAL
+  ALVARA_COMERCIAL
+  LICENCA_ANPG
+}
+
+enum PersonaRole {
+  COMPRADOR
+  COMPANY_ADMIN
+  FORNECEDOR
+  FINANCEIRO
+  ADMIN_SISTEMA // interno KIXIMA, não pertence a nenhuma empresa transacionadora
+}
+
+model Company {
+  id           String        @id @default(uuid())
+  name         String
+  taxId        String        @unique @map("tax_id")
+  type         CompanyType
+  status       CompanyStatus @default(PENDENTE)
+  contactEmail String        @map("contact_email")
+  contactPhone String?       @map("contact_phone")
+  address      String?
+  verified     Boolean       @default(false) // selo "Fornecedor Verificado"
+  logoUrl      String?       @map("logo_url")
+  city         String?
+  province     String?
+  country      String?       @default("Angola")
+  settings     Json? // preferências da empresa (tela Configurações do Company Admin)
+
+  // Dados bancários do fornecedor (para pagamento; aparecem na fatura/PDF).
+  bankName String? @map("bank_name")
+  iban     String?
+  swift    String?
+
+  // Série de faturação certificada PRÓPRIA desta empresa (quando é fornecedora).
+  // Nula até a empresa ter a sua série declarada à AGT — desligado por omissão,
+  // mesma regra de sempre (ver faturacaoService.js). Cada fornecedor é o
+  // emitente fiscal das suas próprias faturas (a KIXIMA nunca compra para
+  // revender — só garante o pagamento, ver contrato de garantia), por isso a
+  // numeração e a cadeia de integridade são POR EMPRESA, nunca uma série
+  // global partilhada entre fornecedores diferentes.
+  serieFiscal String? @map("serie_fiscal")
+
+  // Data de adesão à faturação eletrónica junto da AGT — nula até a empresa
+  // aderir. A partir dessa data, faturacaoService.atribuir() recusa numerar
+  // documentos com data de emissão anterior (mesma regra que a AGT aplica,
+  // erro E29 da especificação DS.120) — sem data definida, sem restrição.
+  dataAdesaoFacturacaoElectronica DateTime? @map("data_adesao_facturacao_electronica")
+
+  // Aceite dos Termos de Uso e Política de Privacidade no cadastro (quem
+  // regista aceita em nome da empresa; obrigatório no formulário).
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+
+  // --- Dimensão e plano (modelo comercial) ---------------------------------
+  // Declarados no cadastro e confirmáveis pelo Admin do Sistema na due diligence.
+  employees        Int?        @map("employees") // nº de trabalhadores
+  annualRevenueUsd Decimal?    @map("annual_revenue_usd") @db.Decimal(16, 2)
+  size             CompanySize @default(PEQUENA)
+  plan             CompanyPlan @default(BASE)
+  // Posição na ordenação por relevância do marketplace, derivada do plano.
+  // Denormalizada de propósito: ordenar pelo enum daria a ordem de DECLARAÇÃO
+  // do tipo no Postgres, que não é a ordem comercial e mudaria sozinha se
+  // alguém acrescentasse um valor ao enum.
+  searchRank       Int         @default(0) @map("search_rank")
+
+  // Nome + cidade + país normalizados (ver migração 20260831010000).
+  // Mantido por gatilho, como o dos produtos.
+  searchText                String?         @map("search_text")
+  apiKeys                   ApiKey[]
+  // Até quando a subscrição está paga. Null = nunca foi cobrada (o Base de
+  // arranque, ou uma empresa que a KIXIMA pôs num plano à mão).
+  planoValidoAte            DateTime?       @map("plano_valido_ate")
+  cobrancas                 PlanoCobranca[]
+  // Preço por utilizador/mês (USD). Teto do plano BASICO: 100 USD.
+  seatPriceUsd              Decimal         @default(100) @map("seat_price_usd") @db.Decimal(10, 2)
+  planNotes                 String?         @map("plan_notes")
+  // Último patamar de aviso de expiração já enviado (D30/D7/D3/D1/D0/
+  // GRACE_INICIO/GRACE_META) — ver subscriptionExpiryJob.js. Impede repetir o
+  // MESMO aviso todos os dias (isso seria spam); um cron atrasado ou que
+  // falhou um dia ainda assim avança para o patamar certo no dia seguinte,
+  // porque o que conta é o patamar alcançado, não um dia exato batido.
+  // Reposto a null em cada confirmação de subscrição (novo ciclo).
+  ultimoAvisoSubscricaoTier String?         @map("ultimo_aviso_subscricao_tier")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  approvedAt DateTime? @map("approved_at")
+  rejectedAt DateTime? @map("rejected_at")
+
+  users                   User[]
+  productsOffered         Product[]                @relation("SupplierProducts")
+  purchaseOrdersMade      PurchaseOrder[]          @relation("BuyerCompanyOrders")
+  purchaseOrdersRecv      PurchaseOrder[]          @relation("SupplierCompanyOrders")
+  contractsAsClient       Contract[]               @relation("ClientContracts")
+  contractsAsSupplier     Contract[]               @relation("SupplierContracts")
+  supplierPolicies        SupplierToKiximaPolicy[]
+  clientPolicies          KiximaToClientPolicy[]
+  notifications           Notification[]
+  budgetLimit             BudgetLimit?
+  documents               CompanyDocument[]
+  kits                    Kit[]                    @relation("SupplierKits")
+  quotesAsBuyer           QuoteRequest[]           @relation("BuyerQuotes")
+  quotesAsSupplier        QuoteRequest[]           @relation("SupplierQuotes")
+  erpConfig               CompanyErpConfig?
+  erpConfigAudits         CompanyErpConfigAudit[]
+  employeeInvites         EmployeeInvite[]
+  platformFees            PlatformFee[]
+  supplierDevRequests     SupplierDevRequest[]
+  conversationsAsBuyer    Conversation[]           @relation("ConversationAsBuyer")
+  conversationsAsSupplier Conversation[]           @relation("ConversationAsSupplier")
+  feedbacks               Feedback[]
+  addons                  CompanyAddon[]
+  addonCobrancas          AddonCobranca[]
+  poRoboRegras            PoRoboRegra[]
+
+  @@map("companies")
+}
+
+// ---------------------------------------------------------------------------
+// Contador de referências (PO-2026-000123, FAT-…, SD-…).
+//
+// Antes o número saía de um COUNT das linhas existentes. Não é atómico — dois
+// pedidos simultâneos contam o mesmo valor e geram a MESMA referência, e o
+// segundo rebenta com conflito — e desfaz-se com qualquer eliminação, porque o
+// número libertado volta a ser atribuído a uma referência que já existe.
+// Aqui o valor é incrementado atomicamente pela base de dados e nunca recua.
+// ---------------------------------------------------------------------------
+model ReferenceCounter {
+  key   String @id // ex: "PO-2026"
+  value Int    @default(0)
+
+  @@map("reference_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Taxa da plataforma (comissão KIXIMA). Fica À PARTE da PO/Fatura (nenhum dos
+// documentos a mostra) — é gerada na transação do pagamento e cobrada à
+// empresa. Composição: (nº de POs × valor por PO) + valor fixo por fatura.
+// ---------------------------------------------------------------------------
+enum PlatformFeeStatus {
+  PENDENTE
+  COBRADO
+}
+
+model PlatformFee {
+  id         String            @id @default(uuid())
+  companyId  String            @map("company_id")
+  company    Company           @relation(fields: [companyId], references: [id])
+  invoiceId  String            @unique @map("invoice_id")
+  invoice    Invoice           @relation(fields: [invoiceId], references: [id])
+  poCount    Int               @map("po_count")
+  perPo      Decimal           @map("per_po") @db.Decimal(14, 2)
+  perInvoice Decimal           @map("per_invoice") @db.Decimal(14, 2)
+  amount     Decimal           @db.Decimal(14, 2)
+  currency   String            @default("USD")
+  // Base de cálculo da parcela por PO: FIXO (≤ limiar) ou PERCENTUAL (> limiar).
+  basis      String?           @map("basis")
+  // Valor da transação em USD e câmbio usado — guardados para auditoria, já que
+  // as POs são em Kwanzas e o limiar dos 0,20% está em dólares.
+  poValueUsd Decimal?          @map("po_value_usd") @db.Decimal(16, 2)
+  fxRate     Decimal?          @map("fx_rate") @db.Decimal(14, 4)
+  status     PlatformFeeStatus @default(PENDENTE)
+  chargedAt  DateTime?         @map("charged_at")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  @@index([companyId])
+  // Dashboards de cobrança ("quais taxas estão pendentes") filtram por status.
+  @@index([status])
+  @@map("platform_fees")
+}
+
+// ---------------------------------------------------------------------------
+// Convite de funcionário emitido pelo Company Admin. Persiste o convite para
+// permitir estado (Pendente/Aceito/Expirado/Cancelado), reenvio e cancelamento.
+// O envio do link é automático (email); reutiliza o token assinado existente.
+// ---------------------------------------------------------------------------
+enum InviteStatus {
+  PENDENTE
+  ACEITO
+  EXPIRADO
+  CANCELADO
+}
+
+model EmployeeInvite {
+  id          String       @id @default(uuid())
+  // Opcional: um convite de ADMIN_SISTEMA (assessor) não pertence a nenhuma
+  // empresa — mesma razão de User.companyId ser opcional para esse papel.
+  companyId   String?      @map("company_id")
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  email       String
+  role        PersonaRole
+  // Só usado quando role = ADMIN_SISTEMA. Vazio (a omissão) convidaria um
+  // Super Admin sem restrição — a validação do pedido de convite exige pelo
+  // menos uma área, para essa promoção nunca acontecer por um convite normal.
+  adminAreas  String[]     @default([]) @map("admin_areas")
+  token       String       @unique
+  status      InviteStatus @default(PENDENTE)
+  expiresAt   DateTime     @map("expires_at")
+  acceptedAt  DateTime?    @map("accepted_at")
+  createdById String?      @map("created_by_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@index([email])
+  @@map("employee_invites")
+}
+
+// ---------------------------------------------------------------------------
+// Configuração ERP por empresa (pós-aprovação). Liga-se à empresa existente,
+// não a recria. As credenciais ficam cifradas (AES-256-GCM) em configEnc.
+// A execução real da integração é feita pelo kixima-integration-service.
+// ---------------------------------------------------------------------------
+enum CompanyErpSystem {
+  MANUAL // "Sem ERP" — comportamento normal do Kixima
+  PRIMAVERA
+  SAP_S4HANA
+  ORACLE_ERP_CLOUD
+  SAP_ARIBA
+}
+
+model CompanyErpConfig {
+  id              String           @id @default(uuid())
+  companyId       String           @unique @map("company_id")
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  erp             CompanyErpSystem @default(MANUAL)
+  configEnc       String?          @map("config_enc") // credenciais cifradas (null quando MANUAL)
+  lastTestAt      DateTime?        @map("last_test_at")
+  lastTestOk      Boolean?         @map("last_test_ok")
+  lastTestMessage String?          @map("last_test_message")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@map("company_erp_configs")
+}
+
+model CompanyErpConfigAudit {
+  id          String            @id @default(uuid())
+  companyId   String            @map("company_id")
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  action      String // SET | TEST | REMOVE
+  fromErp     CompanyErpSystem? @map("from_erp")
+  toErp       CompanyErpSystem? @map("to_erp")
+  actorUserId String?           @map("actor_user_id")
+  actorName   String?           @map("actor_name")
+  result      String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([companyId])
+  @@map("company_erp_config_audits")
+}
+
+// Documento de credenciamento submetido no cadastro de uma empresa.
+model CompanyDocument {
+  id           String       @id @default(uuid())
+  companyId    String       @map("company_id")
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type         DocumentType
+  fileUrl      String       @map("file_url")
+  originalName String       @map("original_name")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([companyId])
+  @@map("company_documents")
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  role         PersonaRole
+  approvalCap  Decimal?    @map("approval_cap") @db.Decimal(14, 2) // teto para aprovações delegadas (Comprador)
+
+  // Só tem sentido para ADMIN_SISTEMA. VAZIO = Super Admin, sem restrição — é
+  // o valor por omissão, para que ninguém que já tenha ADMIN_SISTEMA perca
+  // acesso a nada só por este campo passar a existir. Não-vazio = assessor,
+  // restrito às áreas listadas (ver AREAS_ADMIN em utils/adminAreas.js).
+  adminAreas String[] @default([]) @map("admin_areas")
+
+  companyId String?  @map("company_id") // null para ADMIN_SISTEMA
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  avatarUrl         String?   @map("avatar_url") // foto de perfil (upload ou câmera)
+  // Idioma escolhido na plataforma (pt/en/fr). Guardado no servidor para os
+  // EMAILS saírem na língua do destinatário — o localStorage do browser não
+  // serve para nada quando é o servidor a escrever a mensagem.
+  locale            String?   @map("locale")
+  active            Boolean   @default(true)
+  // Versão de sessão: incrementar invalida imediatamente todos os tokens JWT
+  // já emitidos para este utilizador (logout global, troca de senha, etc.).
+  tokenVersion      Int       @default(0) @map("token_version")
+  // Aceite individual dos Termos/Privacidade (registo por convite).
+  termsAcceptedAt   DateTime? @map("terms_accepted_at")
+  // --- Verificação em dois passos -------------------------------------------
+  // NOTA SOBRE O NOME: `totpEnabledAt` é histórico — hoje significa "2FA ativa
+  // desde", seja qual for o método. Mantém-se assim de propósito: renomear a
+  // coluna obrigaria a uma migração numa base em produção sem nada ganhar para
+  // quem usa a plataforma. É `mfaMethod` que diz de que método se trata.
+  //
+  //   EMAIL → o código de 6 dígitos é enviado para o email da pessoa (omissão)
+  //   TOTP  → app de autenticação; mantido para quem já a tinha configurada
+  mfaMethod         String?   @map("mfa_method")
+  totpSecret        String?   @map("totp_secret")
+  totpEnabledAt     DateTime? @map("totp_enabled_at")
+  // Código enviado por email, à espera de confirmação. Guarda-se o HASH: é uma
+  // credencial, e quem lê a base não pode entrar na conta de ninguém.
+  mfaCodeHash       String?   @map("mfa_code_hash")
+  mfaCodeExpiraEm   DateTime? @map("mfa_code_expira_em")
+  // Tentativas falhadas neste código. Ao fim de poucas, o código morre — sem
+  // isto, dez minutos de validade dariam para tentar muitos dos 10^6 valores.
+  mfaCodeTentativas Int       @default(0) @map("mfa_code_tentativas")
+
+  // --- Tentativas de entrada falhadas (bloqueio progressivo) ----------------
+  // O limite por IP não protege uma CONTA: quem rode endereços tenta senhas sem
+  // tecto contra um email conhecido, e o contador do rate limiter vive em
+  // memória, por isso reinicia a cada arranque. Estes campos ficam na base
+  // porque o bloqueio tem de sobreviver a um reinício — no plano gratuito o
+  // contentor reinicia sozinho, e um bloqueio que se desfaz nesse momento é um
+  // bloqueio que não existe.
+  falhasSeguidas   Int       @default(0) @map("falhas_seguidas")
+  ultimaFalhaEm    DateTime? @map("ultima_falha_em")
+  // Bloqueio TEMPORÁRIO, sempre. Um bloqueio permanente seria uma arma: bastava
+  // errar a senha de alguém vezes suficientes para o deixar de fora.
+  bloqueadoAte     DateTime? @map("bloqueado_ate")
+  // Quando se avisou o titular pela última vez, para não lhe encher a caixa.
+  avisoBloqueioEm  DateTime? @map("aviso_bloqueio_em")
+  // Trava reenvios seguidos (e impede usar a plataforma para enviar email a
+  // outra pessoa em catadupa).
+  mfaCodeEnviadoEm DateTime? @map("mfa_code_enviado_em")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  purchaseOrdersCreated   PurchaseOrder[]       @relation("PoCreatedBy")
+  purchaseOrdersApproved  PurchaseOrder[]       @relation("PoApprovedBy")
+  notifications           Notification[]
+  favorites               Favorite[]
+  reviews                 Review[]
+  savedSearches           SavedSearch[]
+  supportTicketsAssumidos SupportTicket[]       @relation("SupportTicketAssignee")
+  supportMessages         SupportMessage[]
+  conversationMessages    ConversationMessage[]
+  riskAlertsAnalisados    RiskAlert[]           @relation("RiskAlertReviewer")
+  feedbacks               Feedback[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+// Pesquisa guardada pelo comprador ("Guardar Pesquisa").
+model SavedSearch {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String
+  query     String // querystring (ex.: q=UT&kind=SERVICO&country=Angola)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo
+// ---------------------------------------------------------------------------
+
+model Product {
+  id         String  @id @default(uuid())
+  supplierId String  @map("supplier_id")
+  supplier   Company @relation("SupplierProducts", fields: [supplierId], references: [id])
+
+  // --- Identificação ---
+  name             String
+  sku              String? // referência interna do fornecedor
+  manufacturerCode String? @map("manufacturer_code") // código do fabricante
+  category         String
+  subcategory      String?
+  brand            String?
+  manufacturer     String?
+  model            String?
+  countryOfOrigin  String? @map("country_of_origin")
+
+  // --- Descrição ---
+  description     String? // descrição curta (usada nos cartões do marketplace)
+  fullDescription String? @map("full_description")
+  applications    String?
+  benefits        String?
+  keywords        String?
+
+  // --- Classificação (UNSPSC, preenchida via dropdown em cascata) ---
+  unspscCode    String? @map("unspsc_code") // ex.: 40141607
+  unspscTitle   String? @map("unspsc_title") // título oficial (EN)
+  unspscSegment String? @map("unspsc_segment") // 2 dígitos
+  unspscFamily  String? @map("unspsc_family") // 4 dígitos
+  unspscClass   String? @map("unspsc_class") // 6 dígitos
+
+  // --- Atributos universais (livres, comuns a qualquer produto/serviço) ---
+  keySpec       String? @map("key_spec") // Especificação principal
+  standard      String? // Norma / Certificação
+  warranty      String? // Garantia / Validade
+  incoterm      String? // Incoterm (ex.: DAP, EXW, CIF) — comparação de fornecedores
+  supplierNotes String? @map("supplier_notes") // Comentários do fornecedor
+
+  // --- Especificações técnicas (texto livre — os valores variam muito) ---
+  material        String?
+  weight          String?
+  height          String?
+  width           String?
+  length          String?
+  pressure        String?
+  temperature     String?
+  power           String?
+  voltage         String?
+  measurementUnit String? @map("measurement_unit")
+
+  // --- Preço ---
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(14, 2)
+  promoPrice  Decimal? @map("promo_price") @db.Decimal(14, 2)
+  currency    String   @default("AOA")
+  minQuantity Int?     @map("min_quantity")
+  maxQuantity Int?     @map("max_quantity")
+
+  // --- Estoque ---
+  stockQuantity Int?    @map("stock_quantity")
+  warehouse     String?
+  leadTimeDays  Int?    @map("lead_time_days") // tempo de entrega (dias)
+  availability  String? // "Em stock" | "Sob encomenda" | "Esgotado"
+  minStock      Int?    @map("min_stock")
+
+  // --- Marketplace (Serviços/Produtos) ---
+  slug           String?     @unique // URL amigável (ex.: inspecao-por-ultrassom-ut)
+  kind           ProductKind @default(PRODUTO) // PRODUTO | SERVICO
+  specialty      String? // especialidade (serviços)
+  city           String?
+  province       String?
+  country        String?     @default("Angola")
+  certifications String[]    @default([]) // ex.: ISO 9001, API Q1
+  tags           String[]    @default([])
+
+  active Boolean @default(true)
+
+  // Reputação (marketplace) — média de avaliações e nº de avaliações.
+  rating      Float?
+  reviewCount Int    @default(0) @map("review_count")
+  viewCount   Int    @default(0) @map("view_count") // nº de visualizações por compradores
+
+  // Texto de pesquisa normalizado (minúsculas, sem acentos), mantido por um
+  // GATILHO na base — nunca escrito pela aplicação. Ver a migração
+  // 20260831000000_pesquisa_sem_acentos para o porquê do gatilho e não de
+  // código aqui. Nullable porque o gatilho a preenche; nunca fica vazia.
+  searchText String? @map("search_text")
+  imageUrl   String? @map("image_url") // imagem principal (destaque no marketplace)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  poItems      PurchaseOrderItem[]
+  images       ProductImage[]
+  documents    ProductDocument[]
+  movements    StockMovement[]
+  kitItems     KitItem[]
+  quoteItems   QuoteItem[]
+  favorites    Favorite[]
+  reviews      Review[]
+  poRoboRegras PoRoboRegra[]
+
+  @@index([category])
+  @@index([kind])
+  @@index([supplierId])
+  @@map("products")
+}
+
+enum ProductKind {
+  PRODUTO
+  SERVICO
+}
+
+// Favorito (coração) — persistido por utilizador.
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("favorites")
+}
+
+// Avaliação de um produto/serviço por um comprador.
+model Review {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int // 1..5
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+enum QuoteStatus {
+  ABERTA // pedido enviado, a aguardar resposta do fornecedor
+  RESPONDIDA // fornecedor respondeu com preço/prazo
+  FECHADA // comprador encerrou o pedido
+}
+
+// Pedido de cotação (RFQ): comprador pede preço a um fornecedor por itens.
+model QuoteRequest {
+  id                String  @id @default(uuid())
+  buyerCompanyId    String  @map("buyer_company_id")
+  buyerCompany      Company @relation("BuyerQuotes", fields: [buyerCompanyId], references: [id])
+  supplierCompanyId String  @map("supplier_company_id")
+  supplierCompany   Company @relation("SupplierQuotes", fields: [supplierCompanyId], references: [id])
+  createdById       String  @map("created_by_id")
+
+  status QuoteStatus @default(ABERTA)
+  note   String?
+
+  responsePrice    Decimal?  @map("response_price") @db.Decimal(14, 2)
+  responseLeadDays Int?      @map("response_lead_days")
+  responseNote     String?   @map("response_note")
+  respondedAt      DateTime? @map("responded_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items QuoteItem[]
+
+  @@index([buyerCompanyId])
+  @@index([supplierCompanyId])
+  @@map("quote_requests")
+}
+
+model QuoteItem {
+  id             String       @id @default(uuid())
+  quoteRequestId String       @map("quote_request_id")
+  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  productId      String       @map("product_id")
+  product        Product      @relation(fields: [productId], references: [id])
+  quantity       Int          @default(1)
+
+  @@index([productId])
+  @@index([quoteRequestId])
+  @@map("quote_items")
+}
+
+// Kit: conjunto de produtos vendidos como pacote (organização do catálogo).
+model Kit {
+  id          String    @id @default(uuid())
+  supplierId  String    @map("supplier_id")
+  supplier    Company   @relation("SupplierKits", fields: [supplierId], references: [id])
+  name        String
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  items       KitItem[]
+
+  @@index([supplierId])
+  @@map("kits")
+}
+
+model KitItem {
+  id        String  @id @default(uuid())
+  kitId     String  @map("kit_id")
+  kit       Kit     @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int     @default(1)
+
+  @@index([kitId])
+  @@index([productId])
+  @@map("kit_items")
+}
+
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+}
+
+// Movimento de inventário (entrada/saída) que ajusta o stock do produto.
+model StockMovement {
+  id          String            @id @default(uuid())
+  productId   String            @map("product_id")
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type        StockMovementType
+  quantity    Int
+  note        String?
+  createdById String?           @map("created_by_id")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@map("stock_movements")
+}
+
+// Galeria de imagens do produto (a principal também fica em Product.imageUrl).
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false) @map("is_primary")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+enum ProductDocType {
+  FICHA_TECNICA
+  DATASHEET
+  MANUAL
+  CATALOGO
+  CERTIFICADO
+  DESENHO_TECNICO
+}
+
+// Documentos técnicos anexados ao produto (ficha técnica, datasheet, etc.).
+model ProductDocument {
+  id           String         @id @default(uuid())
+  productId    String         @map("product_id")
+  product      Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type         ProductDocType
+  fileUrl      String         @map("file_url")
+  originalName String         @map("original_name")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@index([productId])
+  @@map("product_documents")
+}
+
+// ---------------------------------------------------------------------------
+// Ordens de Compra (PO) — fluxo central
+// ---------------------------------------------------------------------------
+
+enum PoStatus {
+  AGUARDANDO_APROVACAO
+  APROVADA
+  REJEITADA
+  ACEITE_FORNECEDOR // fornecedor aceitou -> relógio dos 7 dias começa
+  RECUSADA_FORNECEDOR
+  AGUARDANDO_PAGAMENTO
+  PAGA
+  EM_EXECUCAO
+  ENTREGUE
+  RECEBIDA_CONFORME
+  RECEBIDA_COM_DIVERGENCIA
+  CONCLUIDA
+}
+
+model PurchaseOrder {
+  id        String @id @default(uuid())
+  reference String @unique // ex: PO-2026-00001
+
+  buyerCompanyId String  @map("buyer_company_id")
+  buyerCompany   Company @relation("BuyerCompanyOrders", fields: [buyerCompanyId], references: [id])
+
+  supplierCompanyId String  @map("supplier_company_id")
+  supplierCompany   Company @relation("SupplierCompanyOrders", fields: [supplierCompanyId], references: [id])
+
+  createdById String @map("created_by_id")
+  createdBy   User   @relation("PoCreatedBy", fields: [createdById], references: [id])
+
+  approvedById String? @map("approved_by_id")
+  approvedBy   User?   @relation("PoApprovedBy", fields: [approvedById], references: [id])
+
+  status            PoStatus @default(AGUARDANDO_APROVACAO)
+  // totalAmount é o que o comprador se compromete a pagar: JÁ COM IVA, igual ao
+  // total da fatura que a PO vai gerar. O líquido e o imposto ficam guardados à
+  // parte para o documento os poder discriminar e para a contabilidade.
+  totalAmount       Decimal  @map("total_amount") @db.Decimal(14, 2)
+  netAmount         Decimal? @map("net_amount") @db.Decimal(14, 2) // subtotal sem IVA
+  taxAmount         Decimal? @map("tax_amount") @db.Decimal(14, 2) // IVA
+  withholdingAmount Decimal? @map("withholding_amount") @db.Decimal(14, 2) // retenção na fonte II (serviços)
+  currency          String   @default("AOA")
+
+  // Call-off: PO emitida ao abrigo de contrato-quadro ativo -> dispensa aprovação e pagamento antecipado por PO
+  isCallOff  Boolean   @default(false) @map("is_call_off")
+  contractId String?   @map("contract_id")
+  contract   Contract? @relation(fields: [contractId], references: [id])
+
+  // Marca esta call-off como já incluída numa fatura consolidada — sem isto,
+  // `Invoice.purchaseOrderId` fica sempre null em faturas consolidadas (é
+  // estrutural: uma fatura consolidada cobre VÁRIAS PO, não pode usar a FK
+  // 1:1 normal), e uma query de "call-offs pendentes de faturar" baseada só
+  // nessa relação nunca consegue ver uma consolidação já feita — reprocessa
+  // as mesmas call-offs a cada nova chamada. Ver contractService.consolidateContractBilling.
+  consolidatedInvoiceId String?  @map("consolidated_invoice_id")
+  consolidatedInvoice   Invoice? @relation("ConsolidatedCallOffs", fields: [consolidatedInvoiceId], references: [id])
+
+  // Relógio dos 7 dias (ou prazo do contrato, se call-off)
+  acceptedAt   DateTime? @map("accepted_at") // gatilho do prazo de pagamento
+  paymentDueAt DateTime? @map("payment_due_at") // acceptedAt + PAYMENT_SLA_DAYS (ou prazo do contrato)
+  paidAt       DateTime? @map("paid_at")
+
+  dispatchedAt    DateTime? @map("dispatched_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  receivedAt      DateTime? @map("received_at")
+  receptionStatus String?   @map("reception_status") // "Conforme" | "Não Entregue" | "Com Divergência"
+
+  // Resolução de divergências: o comprador fecha a divergência aceitando a
+  // entrega (→ CONCLUIDA) ou pedindo reposição ao fornecedor (→ EM_EXECUCAO,
+  // que reabre o ciclo entrega→receção). Fica o registo de quem/quando/como.
+  divergenceResolution      String?   @map("divergence_resolution") // ACEITE | REPOSICAO
+  divergenceResolutionNotes String?   @map("divergence_resolution_notes")
+  divergenceResolvedAt      DateTime? @map("divergence_resolved_at")
+
+  approvedAt      DateTime? @map("approved_at")
+  rejectedAt      DateTime? @map("rejected_at")
+  rejectionReason String?   @map("rejection_reason")
+
+  // Recusa do fornecedor (distinta da rejeição do Company Admin acima): o
+  // motivo é obrigatório — sem ele a ordem fica num beco sem explicação para
+  // quem a emitiu.
+  refusedAt     DateTime? @map("refused_at")
+  refusalReason String?   @map("refusal_reason")
+
+  // --- ERP DOA Approval (PRO) -----------------------------------------------
+  // Quando `erpManaged` é true, a APROVAÇÃO E O PAGAMENTO desta PO acontecem
+  // no ERP do comprador (workflow/DOA próprio) — não no KIXIMA. A PO nasce e
+  // fica em AGUARDANDO_APROVACAO (nenhum estado novo no enum: menos risco,
+  // todo o código que já verifica este estado continua válido), mas
+  // approvePurchaseOrder/rejectPurchaseOrder recusam a decisão manual — só
+  // poService.aplicarDecisaoErp (via callback assinado) a pode mudar. Ver
+  // erpConfigService.js (config por empresa) e integrationRoutes.js (callback).
+  erpManaged             Boolean   @default(false) @map("erp_managed")
+  erpExternalId          String?   @map("erp_external_id") // id do documento no ERP, quando conhecido
+  erpApprovalRequestedAt DateTime? @map("erp_approval_requested_at")
+
+  // Automatic PO Robot (add-on PRO): "HUMANO" (omissão, sempre) ou "ROBOT"
+  // quando gerada por poRoboService.executarCiclo(). Nasce sempre em
+  // AGUARDANDO_APROVACAO como qualquer outra — o robot cria, nunca aprova.
+  createdBySource String @default("HUMANO") @map("created_by_source")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items       PurchaseOrderItem[]
+  invoice     Invoice?
+  erpSyncLogs ErpSyncLog[]
+
+  @@index([status])
+  @@index([buyerCompanyId])
+  @@index([supplierCompanyId])
+  @@index([approvedById])
+  @@index([contractId])
+  @@index([createdById])
+  @@index([consolidatedInvoiceId])
+  @@map("purchase_orders")
+}
+
+// ---------------------------------------------------------------------------
+// Histórico de sincronização ERP de uma PO — pedido explícito ("registar logs
+// e histórico de sincronização"). NÃO guarda o payload bruto completo (pode
+// conter dados de negócio — mesma cautela do integrationRoutes.js ao não
+// logar o corpo do callback).
+// ---------------------------------------------------------------------------
+enum ErpSyncDirection {
+  OUTBOUND // KIXIMA → ERP (pedido de aprovação enviado)
+  INBOUND // ERP → KIXIMA (decisão/pagamento recebido via callback)
+}
+
+enum ErpSyncStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model ErpSyncLog {
+  id              String           @id @default(uuid())
+  purchaseOrderId String           @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  direction       ErpSyncDirection
+  eventType       String           @map("event_type") // ex.: approval_requested, approval_decided, payment_confirmed
+  status          ErpSyncStatus
+  externalId      String?          @map("external_id")
+  errorMessage    String?          @map("error_message")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([purchaseOrderId])
+  @@map("erp_sync_logs")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @map("purchase_order_id")
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity  Int
+  unitPrice Decimal @map("unit_price") @db.Decimal(14, 2)
+  lineTotal Decimal @map("line_total") @db.Decimal(14, 2)
+
+  @@index([productId])
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Automatic PO Robot (add-on PRO) — regra por produto: com que periodicidade,
+// que quantidade (aceite da IA ou definida à mão) e que limite de segurança.
+// O robot PREPARA a PO (poRoboService.executarCiclo); NUNCA a aprova nem
+// paga — isso continua sujeito à aprovação humana ou ao workflow DOA do ERP
+// (funcionalidade 1), exatamente como qualquer PO criada por uma pessoa.
+// ---------------------------------------------------------------------------
+enum PoRoboMediaOrigem {
+  IA
+  MANUAL
+}
+
+enum PoRoboPeriodicidade {
+  SEMANAL
+  QUINZENAL
+  MENSAL
+}
+
+model PoRoboRegra {
+  id        String  @id @default(uuid())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+
+  // IA: mediaMensal vem de categoryAnalyticsService.mediaMensalPorProduto
+  // (mesma função do Category Management, nunca duplicada). MANUAL: o
+  // cliente definiu a média/quantidade à mão.
+  mediaOrigem   PoRoboMediaOrigem   @default(IA) @map("media_origem")
+  mediaMensal   Decimal             @map("media_mensal") @db.Decimal(14, 3)
+  periodicidade PoRoboPeriodicidade @default(MENSAL)
+  // Quantidade fixa por execução, quando definida à mão — sobrepõe o cálculo
+  // pela média mensal/periodicidade quando presente.
+  quantidade    Int?
+
+  ativo             Boolean  @default(true)
+  // Limite de segurança pedido explicitamente: nenhuma PO desta regra
+  // ultrapassa este valor, nem quando a média/quantidade calculada excede.
+  limiteMaximoUsd   Decimal? @map("limite_maximo_usd") @db.Decimal(14, 2)
+  // Quando corre a seguir. Só avança DEPOIS de criar a PO com sucesso — é
+  // isto que impede duplicar a PO se o job correr duas vezes no mesmo ciclo.
+  proximaExecucaoEm DateTime @map("proxima_execucao_em")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@index([ativo, proximaExecucaoEm])
+  @@map("po_robo_regras")
+}
+
+// ---------------------------------------------------------------------------
+// Faturas e Pagamentos (geradas automaticamente na aceitação da PO)
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  PENDENTE
+  PAGA
+  VENCIDA
+  CANCELADA
+}
+
+model Invoice {
+  id        String @id @default(uuid())
+  reference String @unique // ex: FAT-2026-00001
+
+  purchaseOrderId String?        @unique @map("purchase_order_id") // null se fatura consolidada de call-offs
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  // Faturamento consolidado de call-offs de um contrato (periódico)
+  contractId        String?   @map("contract_id")
+  contract          Contract? @relation(fields: [contractId], references: [id])
+  consolidatedPoIds String[]  @default([]) @map("consolidated_po_ids")
+  consolidatedCallOffs PurchaseOrder[] @relation("ConsolidatedCallOffs")
+
+  amount            Decimal       @db.Decimal(14, 2) // total a pagar pelo comprador (com IVA)
+  netAmount         Decimal?      @map("net_amount") @db.Decimal(14, 2) // subtotal sem IVA
+  taxAmount         Decimal?      @map("tax_amount") @db.Decimal(14, 2) // IVA (14%)
+  withholdingAmount Decimal?      @map("withholding_amount") @db.Decimal(14, 2) // retenção na fonte II (6,5% serviços)
+  currency          String        @default("AOA")
+  status            InvoiceStatus @default(PENDENTE)
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+  dueAt    DateTime @map("due_at")
+
+  // --- Faturação certificada (AGT) ------------------------------------------
+  // Nulos nas faturas anteriores à série certificada, e é assim que se
+  // distinguem. Ver a migração 20260901000000_faturacao_agt.
+  serie         String?   @map("serie")
+  numeroNaSerie Int?      @map("numero_na_serie")
+  // Cada documento assina o anterior: adulterar um deles parte a cadeia a partir dele.
+  hashDocumento String?   @map("hash_documento")
+  hashAnterior  String?   @map("hash_anterior")
+  assinadaEm    DateTime? @map("assinada_em")
+
+  // documentNo REAL enviado à AGT ("FT <seriesCode>/<número>") — atribuído
+  // uma única vez por agtSeriesService.atribuirDocumentNo() (série REAL da
+  // AGT, nunca a `serie` acima, que é a cadeia de integridade INTERNA e
+  // independente). Gravado para nunca mudar depois de atribuído: pedidos
+  // repetidos do mesmo payload (preview, reenvio no pagamento) devolvem
+  // sempre o mesmo número.
+  agtDocumentNo String? @map("agt_document_no")
+
+  // Resultado do ÚLTIMO reenvio do FT à AGT (registarFactura, ver
+  // paymentService.processPayment) — sem isto, esse resultado só existia na
+  // resposta HTTP do momento do pagamento, perdido depois. `agtErro` fica
+  // `null` quando a última tentativa foi aceite; `agtResultCode`/
+  // `agtRequestId` refletem sempre essa última tentativa, aceite ou recusada.
+  agtRequestId  String? @map("agt_request_id")
+  agtResultCode String? @map("agt_result_code")
+  agtErro       Json?   @map("agt_erro")
+  // Estado real do processamento (obterEstado, DS.120) — consultado
+  // automaticamente assim que há requestID (ver
+  // agtPayloadService.submeterFatura/consultarEstadoSePossivel), aceite ou
+  // recusado: a resposta síncrona de registarFactura não diz mais do que
+  // "recebido" (errorList quase sempre `[""]`).
+  agtEstado Json? @map("agt_estado")
+
+  // Referência que o pagador escreve na transferência. Única em toda a
+  // plataforma — é por ela que a conciliação encontra a fatura, e duas iguais
+  // tornariam a conciliação ambígua, que é o mesmo que inútil.
+  referenciaPagamento String?        @unique @map("referencia_pagamento")
+  linhasExtrato       LinhaExtrato[]
+
+  payment     Payment?
+  platformFee PlatformFee?
+  creditNotes CreditNote[]
+  lines       InvoiceLine[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([contractId])
+  @@index([serie, numeroNaSerie])
+  // issuedAt: filtro principal do SAF-T (saftService.gerar, um intervalo de
+  // datas sobre a tabela inteira, que só cresce — é dado fiscal, nunca se
+  // apaga). dueAt/status: relatórios de faturas vencidas/por estado nos
+  // dashboards financeiros. Sem estes três, todas essas queries eram
+  // sequential scan.
+  @@index([issuedAt])
+  @@index([dueAt])
+  @@index([status])
+  @@map("invoices")
+}
+
+// Linha da fatura — cópia (não referência viva) dos PurchaseOrderItem no
+// momento em que a fatura é criada, com o imposto já decomposto por linha
+// (exigido pelo modelo de documento da AGT — ver FACTURA.png de referência:
+// colunas Tipo/Código/Descrição/Qt/Preço/Desconto/IEC/IVA/Iselo). Uma cópia
+// porque a fatura não pode mudar se a PO for editada ou o produto for
+// descontinuado depois de faturado.
+//
+// iecAmount/isAmount ficam sempre a 0 e ivaTaxCode fica sempre "NOR": nenhuma
+// transação real do KIXIMA hoje é isenta, de taxa reduzida, ou sujeita a
+// Imposto Especial de Consumo/Selo — os campos existem para nomear
+// corretamente o que já acontece (a AGT exige o código mesmo à taxa normal),
+// não para simular um cenário que não existe.
+model InvoiceLine {
+  id          String  @id @default(uuid())
+  invoiceId   String  @map("invoice_id")
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNumber  Int     @map("line_number") // sequencial a partir de 1, sem buracos
+  productCode String  @map("product_code") // sku > unspscCode > id do produto
+  description String
+
+  quantity  Decimal @db.Decimal(14, 3)
+  unitPrice Decimal @map("unit_price") @db.Decimal(14, 2)
+  // Sempre 0 hoje — o KIXIMA não tem desconto em PO/fatura. O campo existe
+  // para o documento representar "sem desconto" explicitamente, em vez de
+  // omitir a coluna que a AGT espera ver.
+  discount  Decimal @default(0) @db.Decimal(14, 2)
+  netAmount Decimal @map("net_amount") @db.Decimal(14, 2) // lineTotal, sem imposto
+
+  ivaAmount  Decimal @default(0) @map("iva_amount") @db.Decimal(14, 2)
+  iecAmount  Decimal @default(0) @map("iec_amount") @db.Decimal(14, 2)
+  isAmount   Decimal @default(0) @map("is_amount") @db.Decimal(14, 2)
+  ivaTaxCode String  @default("NOR") @map("iva_tax_code")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([invoiceId, lineNumber])
+  @@map("invoice_lines")
+}
+
+// Nota de crédito — o mecanismo de CORREÇÃO fiscal (nunca um UPDATE na
+// fatura já emitida). Refere sempre a fatura original; o crédito nunca é
+// arbitrário — ver creditNoteService.emitir(), que valida o saldo por
+// creditar antes de aceitar o valor pedido.
+//
+// Série e cadeia de hash PRÓPRIAS — sufixo "-NC" da série do fornecedor,
+// nunca a mesma da fatura: são documentos fiscais distintos, cada um com o
+// seu elo. Usa o MESMO mecanismo de atribuição transacional que a fatura
+// (ver faturacaoService.atribuir, agora com o parâmetro `codigo`) — não um
+// segundo sistema de numeração paralelo.
+model CreditNote {
+  id        String @id @default(uuid())
+  reference String @unique // ex: NC-2026-000001
+
+  invoiceId String  @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  // Motivo obrigatório — uma nota de crédito sem motivo é um crédito que
+  // ninguém consegue explicar depois.
+  motivo String
+
+  amount    Decimal  @db.Decimal(14, 2) // valor creditado, COM IVA (mesma base que Invoice.amount)
+  netAmount Decimal? @map("net_amount") @db.Decimal(14, 2)
+  taxAmount Decimal? @map("tax_amount") @db.Decimal(14, 2)
+  currency  String   @default("AOA")
+
+  // Cadeia de integridade própria — ver o comentário em Invoice.
+  serie         String?   @map("serie")
+  numeroNaSerie Int?      @map("numero_na_serie")
+  hashDocumento String?   @map("hash_documento")
+  hashAnterior  String?   @map("hash_anterior")
+  assinadaEm    DateTime? @map("assinada_em")
+
+  // documentNo REAL enviado à AGT — ver o comentário em Invoice.agtDocumentNo.
+  agtDocumentNo String? @map("agt_document_no")
+
+  // Resultado da submissão EXPLÍCITA e VISÍVEL desta NC à AGT (registarFactura),
+  // feita ao anular uma fatura por completo — ver creditNoteService.anular()/
+  // agtPayloadService.submeterNotaCredito(). Mesmo padrão de
+  // Invoice.agtRequestId/agtResultCode/agtErro/agtEstado: sem isto, o
+  // resultado só existia na resposta HTTP do momento da anulação, perdido
+  // depois. Diferente da submissão automática e silenciosa que
+  // creditNoteService.emitir() já faz por baixo (agtSandboxSubmissionService,
+  // esquema pipe-delimited) — essa não grava nada aqui.
+  agtRequestId  String? @map("agt_request_id")
+  agtResultCode String? @map("agt_result_code")
+  agtErro       Json?   @map("agt_erro")
+  agtEstado     Json?   @map("agt_estado")
+
+  issuedAt    DateTime @default(now()) @map("issued_at")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([invoiceId])
+  @@index([serie, numeroNaSerie])
+  @@map("credit_notes")
+}
+
+// Histórico de pedidos "Solicitar Série" à AGT (DS.120, 4.5) — cada linha é
+// UM pedido feito através de GET /api/faturacao/agt-serie-payload, gravado
+// SÓ quando a AGT aceita — CONFIRMADO em produção (HML): o sucesso real é
+// seriesFEResult.seriesCode existir, não resultCode === "0" (a AGT devolve
+// resultCode=1 mesmo quando aceita — ver agtSandboxClient.solicitarSerie()).
+// Uma recusa nunca cria uma linha aqui — não há série nenhuma atribuída
+// para se registar, ver agtSeriesService.solicitarSerie.
+//
+// seriesCode/authorizedQuantity/firstDocumentNo/lastDocumentNo são
+// exatamente o que a AGT devolveu em seriesFEResult — o seriesCode é o
+// mesmo que depois entra no `documentNo` dos documentos desse tipo/ano/
+// estabelecimento, nunca inventado (ver o comentário no topo de
+// agtSeriesService.js). Os restantes campos são os que foram assinados e
+// submetidos, para auditoria: confirmar depois, sem ir aos logs do
+// servidor, exatamente o que foi pedido.
+model AgtSeriesFe {
+  id                    String  @id @default(uuid())
+  ano                   Int
+  tipoDocumento         String  @map("tipo_documento")
+  establishmentNumber   String  @map("establishment_number")
+  taxRegistrationNumber String  @map("tax_registration_number")
+  seriesCode            String? @map("series_code")
+  // O resto de seriesFEResult, tal como a AGT o devolve — String, não Int,
+  // porque são identificadores/limites de intervalo (ex. "999999999999"),
+  // não valores para somar. Confirmado em produção (HML): resultCode=1 vem
+  // sempre junto (ver solicitarSerie() em agtSandboxClient.js) — o sucesso
+  // real é seriesFEResult.seriesCode existir, não o resultCode.
+  authorizedQuantity    String? @map("authorized_quantity")
+  firstDocumentNo       String? @map("first_document_no")
+  lastDocumentNo        String? @map("last_document_no")
+  submissionUUID        String  @map("submission_uuid")
+  requestID             String? @map("request_id")
+  resultCode            String  @map("result_code")
+  // Sem relação/FK ao User (mesmo padrão de CompanyErpConfigAudit.actorUserId
+  // acima) — um pedido feito por um Admin do Sistema entretanto removido
+  // continua a aparecer no histórico, com o nome que tinha nessa altura.
+  solicitadoPorId       String? @map("solicitado_por_id")
+  solicitadoPorNome     String? @map("solicitado_por_nome")
+
+  // Contador ATÓMICO do último número de documento atribuído dentro desta
+  // série (ver agtSeriesService.atribuirDocumentNo) — mesmo mecanismo de
+  // "SELECT ... FOR UPDATE" que faturacaoService.atribuir() já usa para a
+  // série fiscal interna, só que aqui a série é a REAL da AGT: o `documentNo`
+  // final é "<tipo> <seriesCode>/<ultimoNumero+1>". Começa em 0 — o primeiro
+  // documento desta série fica "/1".
+  ultimoNumero Int @default(0) @map("ultimo_numero")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ano, tipoDocumento])
+  @@map("agtseriesfe")
+}
+
+// Série de faturação declarada à AGT.
+//
+// O contador vive aqui e é lido com bloqueio DENTRO da transação da fatura —
+// ver faturacaoService.emitir(). É por isso que não se usa o
+// `reference_counters`: esse incrementa fora da transação e deixa buracos
+// quando algo falha a seguir, e numa numeração certificada um buraco é uma
+// pergunta sem resposta boa numa inspeção.
+// Linha do extrato bancário, tal como entrou.
+//
+// Guarda-se o EXTRATO e não só o resultado da conciliação. Uma conciliação que
+// só regista sucessos não responde à pergunta que interessa quando algo corre
+// mal: "o dinheiro entrou?". "Não encontrámos nada" e "entrou mas não casou"
+// são respostas diferentes — a segunda tem uma linha aqui, a primeira não.
+model LinhaExtrato {
+  id           String    @id @default(uuid())
+  // Identificador da linha no banco: é o que torna a importação idempotente.
+  // Reenviar um extrato é banal, e não pode pagar a mesma fatura duas vezes.
+  idNoBanco    String    @unique @map("id_no_banco")
+  dataValor    DateTime  @map("data_valor")
+  montante     Decimal   @db.Decimal(14, 2)
+  moeda        String    @default("AOA")
+  descricao    String?
+  referencia   String?
+  estado       String    @default("POR_CONCILIAR")
+  invoiceId    String?   @map("invoice_id")
+  invoice      Invoice?  @relation(fields: [invoiceId], references: [id])
+  motivo       String?
+  importadaEm  DateTime  @default(now()) @map("importada_em")
+  conciliadaEm DateTime? @map("conciliada_em")
+
+  @@index([estado])
+  @@index([referencia])
+  @@map("linhas_extrato")
+}
+
+model SerieFaturacao {
+  id           String   @id @default(uuid())
+  codigo       String
+  ano          Int
+  ultimoNumero Int      @default(0) @map("ultimo_numero")
+  // O elo a que a próxima fatura se agarra.
+  ultimoHash   String?  @map("ultimo_hash")
+  ativa        Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([codigo, ano])
+  @@map("series_faturacao")
+}
+
+enum PaymentStatus {
+  PROCESSADO
+  FALHOU
+}
+
+// Por onde o dinheiro entrou. TRANSFERENCIA_MANUAL é o que sempre existiu e
+// continua a existir: um canal automático que falhe não pode deixar ninguém
+// sem forma de pagar.
+enum CanalPagamento {
+  TRANSFERENCIA_MANUAL
+  REFERENCIA_BANCARIA
+  MULTICAIXA_EXPRESS
+  // Pagamento confirmado pelo ERP do comprador (funcionalidade ERP DOA
+  // Approval, PRO) — o dinheiro não passa pelo KIXIMA, só a confirmação.
+  ERP
+}
+
+model Payment {
+  id        String  @id @default(uuid())
+  invoiceId String  @unique @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  amount        Decimal        @db.Decimal(14, 2)
+  currency      String         @default("AOA")
+  status        PaymentStatus  @default(PROCESSADO)
+  canal         CanalPagamento @default(TRANSFERENCIA_MANUAL)
+  // Nulo quando o pagamento foi conciliado automaticamente: ninguém o
+  // executou, foi o extrato que bateu certo. Um utilizador "sistema" seria
+  // pior — uma conta que executa pagamentos e a quem ninguém pede contas.
+  processedById String?        @map("processed_by_id") // utilizador Financeiro que executou
+  reference     String         @unique // referência da transação
+
+  // Comprovativo da transferência (obrigatório ao pagar) — prova de que o
+  // dinheiro saiu, visível ao fornecedor.
+  proofUrl  String? @map("proof_url")
+  proofName String? @map("proof_name")
+
+  // Confirmação de receção do valor pelo fornecedor (fecha o ciclo de confiança).
+  receivedAt   DateTime? @map("received_at")
+  receivedById String?   @map("received_by_id")
+
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  // --- Faturação certificada (AGT) ------------------------------------------
+  // O pagamento É o documento "RC" (Recibo) da AGT — série e cadeia de
+  // integridade próprias, mesmo mecanismo que Invoice/CreditNote (ver
+  // faturacaoService.atribuir/serieReciboDoFornecedor). Nulos nos pagamentos
+  // anteriores a esta série existir, mesma regra que os outros dois.
+  serie         String?   @map("serie")
+  numeroNaSerie Int?      @map("numero_na_serie")
+  hashDocumento String?   @map("hash_documento")
+  hashAnterior  String?   @map("hash_anterior")
+  assinadaEm    DateTime? @map("assinada_em")
+
+  // documentNo REAL enviado à AGT — ver o comentário em Invoice.agtDocumentNo.
+  agtDocumentNo String? @map("agt_document_no")
+
+  @@index([serie, numeroNaSerie])
+  @@map("payments")
+}
+
+// Limite de orçamento simples por empresa/centro de custo (opcional, MVP)
+model BudgetLimit {
+  id        String  @id @default(uuid())
+  companyId String  @unique @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+
+  periodMonthly Decimal @map("period_monthly") @db.Decimal(14, 2)
+  currency      String  @default("AOA")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("budget_limits")
+}
+
+// ---------------------------------------------------------------------------
+// Apólices de seguro
+// ---------------------------------------------------------------------------
+
+enum PolicyStatus {
+  SUBMETIDA
+  APROVADA
+  REJEITADA
+  EXPIRADA
+}
+
+// Fornecedor → KIXIMA: submetida no onboarding, condição para credenciamento
+model SupplierToKiximaPolicy {
+  id        String  @id @default(uuid())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+
+  policyNumber   String       @map("policy_number")
+  insurer        String
+  coverageAmount Decimal      @map("coverage_amount") @db.Decimal(14, 2)
+  currency       String       @default("AOA")
+  status         PolicyStatus @default(SUBMETIDA)
+
+  validFrom   DateTime @map("valid_from")
+  validUntil  DateTime @map("valid_until")
+  documentUrl String?  @map("document_url") // PDF/imagem da apólice submetida no cadastro
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@map("supplier_to_kixima_policies")
+}
+
+// KIXIMA → Cliente: emitida pelo Admin do Sistema após due diligence, escopo por empresa
+model KiximaToClientPolicy {
+  id        String  @id @default(uuid())
+  companyId String  @map("company_id")
+  company   Company @relation(fields: [companyId], references: [id])
+
+  policyNumber   String       @map("policy_number")
+  insurer        String
+  coverageAmount Decimal      @map("coverage_amount") @db.Decimal(14, 2)
+  currency       String       @default("AOA")
+  status         PolicyStatus @default(APROVADA)
+
+  issuedById String @map("issued_by_id") // Admin do Sistema KIXIMA
+
+  validFrom  DateTime @map("valid_from")
+  validUntil DateTime @map("valid_until")
+
+  expiryAlertSentAt DateTime? @map("expiry_alert_sent_at") // evita reenviar alerta dos 30 dias
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@map("kixima_to_client_policies")
+}
+
+// ---------------------------------------------------------------------------
+// Contratos-quadro e Call-offs
+// ---------------------------------------------------------------------------
+
+enum ContractStatus {
+  ATIVO
+  EXPIRADO
+  ENCERRADO
+}
+
+enum BillingPeriodicity {
+  TRIMESTRAL
+  SEMESTRAL
+}
+
+model Contract {
+  id        String @id @default(uuid())
+  reference String @unique // ex: CTR-2026-0001
+
+  clientCompanyId String  @map("client_company_id")
+  clientCompany   Company @relation("ClientContracts", fields: [clientCompanyId], references: [id])
+
+  supplierCompanyId String  @map("supplier_company_id")
+  supplierCompany   Company @relation("SupplierContracts", fields: [supplierCompanyId], references: [id])
+
+  categoriesCovered String[] @map("categories_covered") // categorias/itens cobertos pelo contrato
+
+  totalValue Decimal @map("total_value") @db.Decimal(14, 2)
+  currency   String  @default("AOA")
+  usedValue  Decimal @default(0) @map("used_value") @db.Decimal(14, 2)
+
+  billingPeriodicity BillingPeriodicity @map("billing_periodicity")
+  paymentTermDays    Int                @map("payment_term_days") // prazo próprio do contrato (substitui os 7 dias padrão)
+
+  status     ContractStatus @default(ATIVO)
+  validFrom  DateTime       @map("valid_from")
+  validUntil DateTime       @map("valid_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  callOffs             PurchaseOrder[]
+  consolidatedInvoices Invoice[]
+
+  @@index([clientCompanyId])
+  @@index([supplierCompanyId])
+  @@map("contracts")
+}
+
+// ---------------------------------------------------------------------------
+// Notificações
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  IN_APP_EMAIL
+}
+
+enum NotificationType {
+  PO_AGUARDA_APROVACAO
+  PO_APROVADA
+  PO_REJEITADA
+  PO_RECEBIDA_FORNECEDOR
+  FATURA_GERADA
+  PAGAMENTO_PROCESSADO
+  ENTREGA_DESPACHADA
+  RECECAO_COM_DIVERGENCIA
+  DIVERGENCIA_RESOLVIDA
+  SUPPLIER_DEV_RECEBIDA
+  APOLICE_SUBMETIDA_APROVADA
+  APOLICE_A_EXPIRAR
+  CADASTRO_EMPRESA_APROVADO
+  CADASTRO_EMPRESA_REJEITADO
+  SUBSCRICAO_COMPROVATIVO
+  SUBSCRICAO_CONFIRMADA
+  // Aviso escalonado de expiração da subscrição (30/7/3/1/0 dias e durante o
+  // período de tolerância) — ver planService.js e subscriptionExpiryJob.js.
+  SUBSCRICAO_A_EXPIRAR
+  // Chat de Suporte, Chat Comercial e Trust & Safety — três tipos distintos
+  // de propósito: é o que permite ao frontend mostrar três contadores
+  // separados (Suporte / Chat Comercial / Alertas de Segurança) sem misturar
+  // mensagens de naturezas diferentes.
+  SUPORTE_MENSAGEM
+  CHAT_COMERCIAL_MENSAGEM
+  ALERTA_SEGURANCA
+  // Fluxo de PO — cobertura que faltava (recusa do fornecedor, entrega
+  // marcada, receção conforme, conclusão automática da ordem).
+  PO_RECUSADA_FORNECEDOR
+  PO_ENTREGUE
+  PO_RECEBIDA_CONFORME
+  PO_CONCLUIDA
+  // Correção fiscal de uma fatura — ver creditNoteService.js.
+  NOTA_CREDITO_EMITIDA
+  // Stock de um produto cruzou o mínimo definido pelo fornecedor — ver
+  // catalogService.createStockMovement/updateStock.
+  ESTOQUE_BAIXO
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  companyId String?  @map("company_id")
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  type    NotificationType
+  channel NotificationChannel @default(IN_APP)
+  title   String
+  message String
+  readAt  DateTime?           @map("read_at")
+
+  relatedEntityType String? @map("related_entity_type") // "PurchaseOrder" | "Invoice" | "Policy" | "Company" ...
+  relatedEntityId   String? @map("related_entity_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([companyId])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Ajuda & Suporte — pedidos de suporte (tickets) do utilizador
+// ---------------------------------------------------------------------------
+enum SupportStatus {
+  ABERTO
+  EM_ANDAMENTO
+  AGUARDANDO_RESPOSTA
+  RESOLVIDO
+  FECHADO
+}
+
+// Imagem de uma categoria de ajuda. Só o Administrador do Sistema faz upload
+// e pode trocar estas fotos (tela Ajuda & Suporte).
+model SupportCategoryImage {
+  key       String   @id
+  imageUrl  String   @map("image_url")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("support_category_images")
+}
+
+model SupportTicket {
+  id        String        @id @default(uuid())
+  reference String        @unique // ex: SUP-2026-00001
+  userId    String        @map("user_id")
+  companyId String?       @map("company_id")
+  subject   String
+  category  String
+  message   String
+  status    SupportStatus @default(ABERTO)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  // Chat de Suporte — acrescentado por cima do ticket já existente, sem mudar
+  // nenhum campo/estado dos que já lá estavam. Quem da equipa assumiu a
+  // conversa (nulo = ninguém assumiu, está na fila) e o histórico de
+  // mensagens que se seguem à primeira (que continua a viver em `message`).
+  assignedToId String?          @map("assigned_to_id")
+  assignedTo   User?            @relation("SupportTicketAssignee", fields: [assignedToId], references: [id])
+  messages     SupportMessage[]
+
+  @@index([userId])
+  @@index([assignedToId])
+  @@map("support_tickets")
+}
+
+// Mensagens do Chat de Suporte, associadas a um SupportTicket.
+model SupportMessage {
+  id       String        @id @default(uuid())
+  ticketId String        @map("ticket_id")
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId   String      @map("author_id")
+  author     User        @relation(fields: [authorId], references: [id])
+  // Denormalizado: poupa um join só para saber se quem escreveu é o cliente
+  // ou alguém da equipa de suporte (a UI colore a bolha de forma diferente).
+  authorRole PersonaRole @map("author_role")
+
+  body           String
+  attachmentUrl  String? @map("attachment_url")
+  attachmentName String? @map("attachment_name")
+
+  // Lida pelo OUTRO LADO. O "lido" é da equipa, não de um agente — é uma
+  // fila partilhada, não caixas de correio pessoais: se um agente já leu a
+  // mensagem do cliente, não faz sentido outro agente vê-la como nova.
+  readAt DateTime? @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+enum ConversationStatus {
+  ABERTA
+  FECHADA
+}
+
+// ---------------------------------------------------------------------------
+// Chat Comercial — comprador ↔ fornecedor/prestador. contextType/contextId
+// seguem o mesmo padrão polimórfico já usado em
+// Notification.relatedEntityType/relatedEntityId, para associar a conversa a
+// uma cotação, ordem de compra ou contrato quando existir um — mas a
+// conversa também pode existir só entre as duas empresas, sem contexto.
+// ---------------------------------------------------------------------------
+model Conversation {
+  id String @id @default(uuid())
+
+  buyerCompanyId String  @map("buyer_company_id")
+  buyerCompany   Company @relation("ConversationAsBuyer", fields: [buyerCompanyId], references: [id])
+
+  supplierCompanyId String  @map("supplier_company_id")
+  supplierCompany   Company @relation("ConversationAsSupplier", fields: [supplierCompanyId], references: [id])
+
+  contextType String? @map("context_type") // "QuoteRequest" | "PurchaseOrder" | "Contract" | "Product"
+  contextId   String? @map("context_id")
+
+  status ConversationStatus @default(ABERTA)
+
+  createdById String @map("created_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages   ConversationMessage[]
+  riskAlerts RiskAlert[]
+
+  @@index([buyerCompanyId])
+  @@index([supplierCompanyId])
+  @@index([contextType, contextId])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId        String @map("sender_id")
+  sender          User   @relation(fields: [senderId], references: [id])
+  // Denormalizado: de que EMPRESA a mensagem partiu. É o que torna a
+  // verificação de posse uma comparação direta em vez de um join por
+  // mensagem antiga — e o que sobrevive se o autor um dia sair da empresa.
+  senderCompanyId String @map("sender_company_id")
+
+  body           String
+  attachmentUrl  String? @map("attachment_url")
+  attachmentName String? @map("attachment_name")
+
+  readAt DateTime? @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  riskAlert RiskAlert?
+
+  @@index([conversationId])
+  @@map("conversation_messages")
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskAlertStatus {
+  ABERTO
+  EM_ANALISE
+  FALSO_POSITIVO
+  RESOLVIDO
+}
+
+// ---------------------------------------------------------------------------
+// Trust & Safety — possível tentativa de levar a negociação/pagamento para
+// fora do Kixima. Só existe um registo aqui quando o risco já é MEDIUM ou
+// mais: risco baixo é classificado mas não persseguido (ver
+// riskAnalysisService.js) — é o que impede o suporte de "receber todas as
+// conversas comerciais".
+// ---------------------------------------------------------------------------
+model RiskAlert {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  messageId String?              @unique @map("message_id")
+  message   ConversationMessage? @relation(fields: [messageId], references: [id])
+
+  level   RiskLevel
+  reason  String // frase curta e legível do motivo
+  signals Json? // nomes internos dos sinais que dispararam
+  context Json? // excerto da conversa relevante para a análise
+
+  status       RiskAlertStatus @default(ABERTO)
+  reviewedById String?         @map("reviewed_by_id")
+  reviewedBy   User?           @relation("RiskAlertReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?       @map("reviewed_at")
+  decision     String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([status])
+  @@map("risk_alerts")
+}
+
+// ---------------------------------------------------------------------------
+// Trilho de auditoria financeira — APPEND-ONLY. Regista quem fez o quê, quando
+// e de que IP, nas ações com peso financeiro/legal (aprovações, pagamentos,
+// due diligence, dados bancários…). Sem relações e com o ator DESNORMALIZADO
+// (nome/perfil copiados no momento): o registo fica imutável mesmo que o
+// utilizador mude de nome ou seja removido. O código nunca faz UPDATE/DELETE.
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String // ex.: PO_APROVADA, PAGAMENTO_EXECUTADO, TAXA_COBRADA
+  entityType String   @map("entity_type") // PurchaseOrder | Invoice | Payment | Company | PlatformFee | User
+  entityId   String?  @map("entity_id")
+  entityRef  String?  @map("entity_ref") // referência legível (PO-2026-00001, FAT-…)
+  actorId    String?  @map("actor_id")
+  actorName  String?  @map("actor_name")
+  actorRole  String?  @map("actor_role")
+  companyId  String?  @map("company_id") // empresa do ator
+  ip         String?
+  detail     Json? // montantes, estado anterior→novo, etc.
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  // Ecrãs de auditoria/compliance filtrados por empresa (esta tabela regista
+  // TODA a atividade de negócio — cresce indefinidamente, nunca é podada)
+  // forçavam sequential scan sem este índice. Composto com createdAt porque
+  // o padrão de consulta é sempre "atividade desta empresa, mais recente
+  // primeiro".
+  @@index([companyId, createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Development — programa de apoio ao fornecedor nacional: acompanha a
+// emancipação burocrática (registos, licenças, certificações) e procura
+// PARCEIROS INTERNACIONAIS para empresas locais, trazendo mais tecnologia e
+// mais participação angolana ao setor. As candidaturas entram pela página
+// pública (login/home) e são tratadas pelo Admin do Sistema.
+// ---------------------------------------------------------------------------
+
+enum SupplierDevTrack {
+  BUROCRACIA // credenciamento, licenças, certificações, conformidade
+  PARCERIA // procura de parceiro internacional / transferência de tecnologia
+  AMBOS
+}
+
+enum SupplierDevStatus {
+  RECEBIDA
+  EM_ANALISE
+  EM_ACOMPANHAMENTO
+  CONCLUIDA
+  REJEITADA
+}
+
+model SupplierDevRequest {
+  id        String @id @default(uuid())
+  reference String @unique // ex: SD-2026-00001
+
+  // A candidatura é PÚBLICA: pode vir de uma empresa ainda não registada.
+  companyId String?  @map("company_id")
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  companyName   String            @map("company_name")
+  taxId         String?           @map("tax_id")
+  contactName   String            @map("contact_name")
+  contactEmail  String            @map("contact_email")
+  contactPhone  String?           @map("contact_phone")
+  province      String?
+  sector        String? // área de atividade
+  employees     Int?
+  track         SupplierDevTrack  @default(AMBOS)
+  needs         String? // o que precisa / objetivos
+  // TAXA DE ACESSO ao programa (USD/mês) — igual à taxa de acesso das pequenas
+  // empresas e COBRADA LOGO NA SUBMISSÃO DA INTENÇÃO. Fica emitida como
+  // PENDENTE no momento da candidatura; o Admin do Sistema regista a receção.
+  accessFeeUsd  Decimal?          @map("access_fee_usd") @db.Decimal(10, 2)
+  feeStatus     PlatformFeeStatus @default(PENDENTE) @map("fee_status")
+  feePaidAt     DateTime?         @map("fee_paid_at")
+  // O RESTANTE do programa é orçamentado caso a caso após a triagem.
+  // customPricing = true enquanto esse orçamento ainda não foi definido.
+  programFeeUsd Decimal?          @map("program_fee_usd") @db.Decimal(12, 2)
+  customPricing Boolean           @default(true) @map("custom_pricing")
+  status        SupplierDevStatus @default(RECEBIDA)
+  adminNotes    String?           @map("admin_notes")
+  handledById   String?           @map("handled_by_id")
+  handledAt     DateTime?         @map("handled_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("supplier_dev_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Category Management — thresholds de desconto por economia de escala,
+// configuráveis em runtime (pedido explícito: nada disto pode ficar
+// hardcoded). Lidos por discountThresholdService.js; sem linhas aqui, nenhum
+// desconto se aplica — não há um valor por omissão escondido no código.
+// ---------------------------------------------------------------------------
+model DiscountThreshold {
+  id              String   @id @default(uuid())
+  minVolumeUsd    Decimal  @map("min_volume_usd") @db.Decimal(16, 2)
+  discountPercent Decimal  @map("discount_percent") @db.Decimal(5, 2)
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([ativo, minVolumeUsd])
+  @@map("discount_thresholds")
+}
+
+// Avaliação pública da plataforma (homepage corporativa — secção "Avaliações").
+// Sem conta associada de propósito: quem avalia pode ser um comprador, um
+// fornecedor ou um parceiro, e o formulário é público, tal como o resto da
+// home. Fica sempre "approved: false" ao ser criada — só o Admin do Sistema
+// (área SUPORTE) a torna pública. "Feedback real, não decorativo": enquanto
+// não houver avaliações aprovadas, a homepage mostra um estado vazio em vez
+// de testemunhos inventados.
+// Categoria da avaliação — a que é que se refere, não quem a escreve (isso já
+// vem de userId/companyId). EXPERIENCIA_GERAL é a única sem alvo (targetId
+// nulo); todas as outras têm de apontar para algo real que a empresa do autor
+// viveu (ver feedbackService.js: resolverAlvo valida isto na criação).
+enum FeedbackCategoria {
+  FORNECEDOR
+  PRODUTO
+  SERVICO
+  PEDIDO
+  ENTREGA
+  PAGAMENTO
+  ATENDIMENTO
+  EXPERIENCIA_GERAL
+}
+
+model Feedback {
+  id          String            @id @default(uuid())
+  userId      String            @map("user_id")
+  user        User              @relation(fields: [userId], references: [id])
+  companyId   String            @map("company_id")
+  company     Company           @relation(fields: [companyId], references: [id])
+  categoria   FeedbackCategoria
+  // Alvo real da avaliação (empresa, produto, pedido, pagamento, ticket de
+  // suporte…), consoante a categoria. targetLabel é um snapshot do nome/
+  // referência no momento da avaliação — não muda se o alvo for editado ou
+  // apagado depois, tal como o resto da faturação já faz com as suas linhas.
+  targetId    String?           @map("target_id")
+  targetLabel String?           @map("target_label")
+  rating      Int // 1 a 5
+  message     String
+  // Sempre true nesta versão: só quem está autenticado com uma conta e
+  // empresa reais na KIXIMA consegue submeter feedback (ver feedbackService.js
+  // criar()) — já não há testemunho anónimo por escrever à mão. O selo existe
+  // para o distinguir do que a homepage mostrava antes desta mudança.
+  verified    Boolean           @default(true)
+  approved    Boolean           @default(false)
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([approved, createdAt])
+  @@index([userId])
+  @@index([companyId])
+  @@map("feedback")
+}
