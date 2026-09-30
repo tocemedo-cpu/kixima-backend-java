@@ -45,9 +45,13 @@ public class CorsOrigins {
     public CorsOrigins(@Value("${kixima.app-url:}") String appUrl,
                        @Value("${kixima.cors.origins:}") String corsOrigins,
                        Environment environment) {
-        // NODE_ENV=development|test no Node; aqui os perfis "dev"/"test" (e
-        // nenhum perfil activo, que é o equivalente ao NODE_ENV por definir).
-        this(appUrl, corsOrigins, environment.acceptsProfiles(Profiles.of("dev", "test", "default")));
+        // Exige "dev"/"test" EXPLÍCITOS — nunca o perfil "default" (nenhum
+        // perfil activo). Falha em aberto seria: um deploy que esqueça
+        // SPRING_PROFILES_ACTIVE=prod ficaria, em silêncio, a aceitar
+        // qualquer origem com credenciais — CORS mais perigoso do que
+        // nenhum CORS. Correcto é o oposto: sem sinal explícito de
+        // desenvolvimento/teste, tratar como produção (restrito).
+        this(appUrl, corsOrigins, environment.acceptsProfiles(Profiles.of("dev", "test")));
     }
 
     CorsOrigins(String appUrl, String corsOrigins, boolean desenvolvimentoOuTeste) {

@@ -3,6 +3,7 @@ package ao.kixima.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -23,7 +24,13 @@ class RateLimitFilterTest {
 
     private static final String SEGREDO = "teste-jwt-secret-com-pelo-menos-32-caracteres-000000";
     private final JwtService jwt = new JwtService(SEGREDO, "1d");
-    private final SessionCookieUtil cookies = new SessionCookieUtil(jwt, "test");
+    private final SessionCookieUtil cookies = new SessionCookieUtil(jwt, ambienteDeTeste());
+
+    private static MockEnvironment ambienteDeTeste() {
+        MockEnvironment env = new MockEnvironment();
+        env.setActiveProfiles("test");
+        return env;
+    }
     private final ObjectMapper om = new ObjectMapper();
 
     private RateLimitFilter filtro(RateLimitFilter.Limites limites) {

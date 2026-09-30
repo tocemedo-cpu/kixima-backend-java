@@ -2,6 +2,8 @@ package ao.kixima.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -11,7 +13,8 @@ import java.util.Set;
 /**
  * Espelha o guardião de arranque de backend/src/config/env.js (o troço que
  * corre só com NODE_ENV=production): o processo RECUSA-SE a arrancar com um
- * JWT_SECRET fraco ou com o armazenamento mal configurado.
+ * JWT_SECRET fraco, com o armazenamento mal configurado, ou com CORS/cookie
+ * de sessão inseguros.
  *
  * <ul>
  *   <li>JWT_SECRET: já era recusado vazio/"CHANGE_ME"; passou a recusar
@@ -25,11 +28,17 @@ import java.util.Set;
  *       própria base — desaparecem a cada deploy. Antes só ficava um erro no
  *       log e a app continuava a aceitar uploads que se perderiam; agora falha
  *       o arranque, tal como para o JWT_SECRET.</li>
+ *   <li>CORS/cookie ({@link #verificarCorsECookie}): {@link ao.kixima.security.CorsOrigins}
+ *       e {@link ao.kixima.security.SessionCookieUtil} já ficam restritos por
+ *       omissão sem "dev"/"test" explícito — este guardião apanha o caso
+ *       residual de {@code SPRING_PROFILES_ACTIVE=prod,dev} (os dois activos
+ *       ao mesmo tempo) e o caso de nenhuma origem web estar configurada.</li>
  * </ul>
  *
  * Só existe no perfil {@code prod}: em desenvolvimento/teste os valores por
  * omissão de application.yml continuam a servir. A lógica em si está em
- * {@link #verificar} (estática) para se poder testar sem levantar o contexto.
+ * {@link #verificar}/{@link #verificarCorsECookie} (estáticas) para se
+ * poder testar sem levantar o contexto.
  */
 @Component
 @Profile("prod")
@@ -44,8 +53,19 @@ public class ProducaoStartupGuard {
                                 @Value("${kixima.storage.provider:local}") String storageProvider,
                                 @Value("${kixima.storage.bucket:}") String bucket,
                                 @Value("${kixima.storage.access-key:}") String accessKey,
-                                @Value("${kixima.storage.secret-key:}") String secretKey) {
+                                @Value("${kixima.storage.secret-key:}") String secretKey,
+                                @Value("${kixima.app-url:}") String appUrl,
+                                @Value("${kixima.cors.origins:}") String corsOrigins,
+                                Environment environment) {
         verificar(jwtSecret, storageProvider, bucket, accessKey, secretKey);
+        // CORS/cookie: os dois derivam do MESMO sinal (CorsOrigins/SessionCookieUtil)
+        // — "dev"/"test" activos ao lado de "prod" reabre-os por acidente (perfis
+        // múltiplos são válidos no Spring: SPRING_PROFILES_ACTIVE=prod,dev). Verificado
+        // aqui de novo, independentemente das duas classes, para o arranque falhar
+        // já, em vez de um pedido real revelar a má configuração mais tarde.
+        boolean permiteQualquerOrigem = environment.acceptsProfiles(Profiles.of("dev", "test"));
+        boolean semOrigemConfigurada = (appUrl == null || appUrl.isBlank()) && (corsOrigins == null || corsOrigins.isBlank());
+        verificarCorsECookie(permiteQualquerOrigem, semOrigemConfigurada, !permiteQualquerOrigem);
     }
 
     /** Espelha `jwtSecretFraco()` — o motivo, ou null quando o segredo serve. */
@@ -104,6 +124,29 @@ public class ProducaoStartupGuard {
                     + ". Configure o Supabase Storage (ou outro S3-compatível) e defina STORAGE_PROVIDER=s3, STORAGE_BUCKET, "
                     + "STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY. Verifique em Admin do Sistema → Configurações e Suporte → "
                     + "Prontidão para produção.");
+        }
+    }
+
+    /**
+     * Espelha, em produção, a mesma verificação que {@link ao.kixima.security.CorsOrigins}
+     * e {@link ao.kixima.security.SessionCookieUtil} já fazem sozinhas — repetida
+     * aqui para o arranque falhar de forma explícita, em vez de a má
+     * configuração só aparecer num pedido real.
+     */
+    static void verificarCorsECookie(boolean permiteQualquerOrigem, boolean semOrigemConfigurada, boolean cookieSeguro) {
+        List<String> motivos = new ArrayList<>();
+        if (permiteQualquerOrigem) {
+            motivos.add("CORS aceitaria qualquer origem — confirme que nenhum perfil \"dev\"/\"test\" está activo ao lado de \"prod\"");
+        }
+        if (semOrigemConfigurada) {
+            motivos.add("nenhuma origem web autorizada — defina APP_URL ou CORS_ORIGINS");
+        }
+        if (!cookieSeguro) {
+            motivos.add("o cookie de sessão não sairia com Secure");
+        }
+        if (!motivos.isEmpty()) {
+            throw new IllegalStateException("Configuração de CORS/cookie insegura ou incompleta para produção: "
+                    + String.join("; ", motivos) + ".");
         }
     }
 }

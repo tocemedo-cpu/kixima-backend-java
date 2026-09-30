@@ -19,7 +19,9 @@ class EnvStorageS3ProducaoTest {
 
     /** JWT_SECRET válido em todos os casos — este ficheiro testa só o guardião de storage. */
     private static ApplicationContextRunner tentaArrancar(Map<String, String> env) {
-        List<String> props = new ArrayList<>(List.of("spring.profiles.active=prod", "kixima.auth.jwt-secret=" + "a".repeat(48)));
+        List<String> props = new ArrayList<>(List.of("spring.profiles.active=prod", "kixima.auth.jwt-secret=" + "a".repeat(48),
+                // Este ficheiro testa só o storage — CORS/cookie têm o seu próprio ficheiro.
+                "kixima.app-url=https://kixima.example.com"));
         env.forEach((k, v) -> props.add(k + "=" + v));
         return new ApplicationContextRunner()
                 .withUserConfiguration(ProducaoStartupGuard.class)

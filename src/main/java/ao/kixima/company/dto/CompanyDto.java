@@ -60,4 +60,20 @@ public record CompanyDto(String id, String name, String taxId, String type, Stri
                 c.getSearchRank(), c.getPlanoValidoAte(), c.getSeatPriceUsd(), c.getPlanNotes(), c.getCreatedAt(), c.getUpdatedAt(),
                 c.getApprovedAt(), c.getRejectedAt(), supplierPolicies, clientPolicies, budgetLimit, documents, subscricao);
     }
+
+    /**
+     * A mesma ficha, sem `bankName`/`iban`/`swift` — para a listagem
+     * `GET /api/companies`, que exige só a área CADASTRO (não FINANCEIRO). O
+     * endpoint de uma única empresa (`/{id}/bank-details`) continua a exigir
+     * FINANCEIRO e devolve o `CompanyDto` completo; sem isto, a listagem
+     * devolvia os dados bancários de TODAS as empresas a quem só tem
+     * CADASTRO — achado da auditoria de segurança.
+     */
+    public CompanyDto semDadosBancarios() {
+        return new CompanyDto(id, name, taxId, type, status, contactEmail, contactPhone, address, verified, logoUrl,
+                city, province, country, settings, null, null, null, serieFiscal, dataAdesaoFacturacaoElectronica,
+                termsAcceptedAt, employees, annualRevenueUsd, size, plan, searchRank, planoValidoAte, seatPriceUsd,
+                planNotes, createdAt, updatedAt, approvedAt, rejectedAt, supplierPolicies, clientPolicies, budgetLimit,
+                documents, subscricao);
+    }
 }

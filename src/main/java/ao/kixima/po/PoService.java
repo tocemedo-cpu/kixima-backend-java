@@ -414,7 +414,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder approvePurchaseOrder(String id, String approverId, String approverCompanyId) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         // Só o Company Admin da empresa COMPRADORA (a que criou a PO) pode aprová-la.
         if (!po.getBuyerCompanyId().equals(approverCompanyId)) {
             throw new ForbiddenException("Só o Company Admin da empresa compradora pode aprovar esta PO.");
@@ -443,7 +448,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder rejectPurchaseOrder(String id, String approverId, String reason, String approverCompanyId) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getBuyerCompanyId().equals(approverCompanyId)) {
             throw new ForbiddenException("Só o Company Admin da empresa compradora pode rejeitar esta PO.");
         }
@@ -470,7 +480,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder acceptPurchaseOrder(String id, String supplierCompanyId) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getSupplierCompanyId().equals(supplierCompanyId)) {
             throw new ForbiddenException("Só o fornecedor da PO pode aceitá-la.");
         }
@@ -548,7 +563,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder refusePurchaseOrder(String id, String supplierCompanyId, String reason) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getSupplierCompanyId().equals(supplierCompanyId)) {
             throw new ForbiddenException("Só o fornecedor da PO pode recusá-la.");
         }
@@ -566,7 +586,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder dispatchPurchaseOrder(String id, String supplierCompanyId) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getSupplierCompanyId().equals(supplierCompanyId)) {
             throw new ForbiddenException("Só o fornecedor da PO pode despachar a entrega.");
         }
@@ -584,7 +609,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder markDelivered(String id, String supplierCompanyId) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getSupplierCompanyId().equals(supplierCompanyId)) {
             throw new ForbiddenException("Só o fornecedor da PO pode marcar como entregue.");
         }
@@ -604,7 +634,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder confirmReception(String id, String buyerCompanyId, ConfirmacaoRececao body) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getBuyerCompanyId().equals(buyerCompanyId)) {
             throw new ForbiddenException("Só o comprador da PO pode confirmar a receção.");
         }
@@ -642,7 +677,12 @@ public class PoService {
 
     @Transactional
     public PurchaseOrder resolveDivergence(String id, String buyerCompanyId, ResolucaoDivergencia body) {
-        PurchaseOrder po = getPurchaseOrder(id, null);
+        // Bloqueio pessimista — a mesma reivindicação atómica que já protegia os
+        // callbacks do ERP (aplicarDecisaoErp/aplicarPagamentoErp), agora também
+        // nas transições humanas: sem isto, duas chamadas concorrentes liam o
+        // MESMO estado antigo antes de qualquer commit e podiam ambas passar a
+        // verificação de estado abaixo — achado da auditoria de segurança.
+        PurchaseOrder po = purchaseOrderRepository.findByIdParaAtualizar(id).orElseThrow(() -> new NotFoundException("Ordem de compra"));
         if (!po.getBuyerCompanyId().equals(buyerCompanyId)) {
             throw new ForbiddenException("Só o comprador da PO pode resolver a divergência.");
         }

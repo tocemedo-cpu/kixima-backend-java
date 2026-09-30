@@ -9,6 +9,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,6 +60,9 @@ class CompanyControllerTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -76,6 +81,14 @@ class CompanyControllerTest {
 
     private String companyIdOf(String taxId) {
         return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, taxId);
+    }
+
+    /** O seed não tem um segundo Admin do Sistema; um assessor restrito é criado como fixture (mesmo padrão de AdminControllerTest). */
+    private void criarAssessor(String email, String... areas) {
+        jdbcTemplate.update("INSERT INTO users (id, name, email, password_hash, role, admin_areas, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, ?, 'ADMIN_SISTEMA'::\"PersonaRole\", ?, true, now(), now())",
+                UUID.randomUUID().toString(), "Assessor (teste)", email, passwordEncoder.encode(PASSWORD), areas);
+        entityManager.clear();
     }
 
     private MockMultipartHttpServletRequestBuilder registo(Map<String, String> campos, String... docTypes) {
@@ -313,6 +326,59 @@ class CompanyControllerTest {
         assertThat(detail).contains("••••0123").doesNotContain("AO06004000001234567890123");
         mockMvc.perform(get("/api/companies/" + companyIdOf("AO-CLI-0001") + "/bank-details").header("Authorization", "Bearer " + fornecedorToken))
                 .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Achado da auditoria de segurança: GET /api/companies só exigia a área
+     * CADASTRO, mas devolvia bankName/iban/swift de todas as empresas — dados
+     * que o endpoint de uma única empresa (/{id}/bank-details) só entrega a
+     * quem tem a área FINANCEIRO. Prova as 3 combinações pedidas.
+     */
+    @Test
+    void listaDeEmpresasSoMostraDadosBancariosAQuemTemAreaFinanceiro() throws Exception {
+        String companyId = companyIdOf("AO-FOR-0001");
+        String fornecedorToken = login(FORNECEDOR_EMAIL);
+        mockMvc.perform(put("/api/companies/" + companyId + "/bank-details")
+                        .header("Authorization", "Bearer " + fornecedorToken)
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(Map.of("bankName", "BAI", "iban", "AO06004000001234567890123", "swift", "BAIAAOLU"))))
+                .andExpect(status().isOk());
+        // Cada pedido mockMvc tem o seu próprio EntityManager (open-in-view), partilhando só a
+        // ligação/transacção do teste — sem este flush explícito, a leitura seguinte não vê a escrita.
+        entityManager.flush();
+
+        criarAssessor("assessor.cadastro@kixima.co.ao", "cadastro");
+        criarAssessor("assessor.financeiro@kixima.co.ao", "cadastro", "financeiro");
+
+        // 1. Sem FINANCEIRO — a listagem não devolve bankName/iban/swift desta (nem de nenhuma) empresa.
+        String semFinanceiroToken = login("assessor.cadastro@kixima.co.ao");
+        var semFinanceiroRes = mockMvc.perform(get("/api/companies").header("Authorization", "Bearer " + semFinanceiroToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + companyId + "')]").exists())
+                .andReturn();
+        var semFinanceiroJson = objectMapper.readTree(semFinanceiroRes.getResponse().getContentAsString());
+        var empresaSemFinanceiro = java.util.stream.StreamSupport.stream(semFinanceiroJson.spliterator(), false)
+                .filter(c -> c.get("id").asText().equals(companyId))
+                .findFirst().orElseThrow();
+        // A chave sai (o record não tem @JsonInclude(NON_NULL) nestes três campos), mas o
+        // VALOR é sempre null nesta listagem para quem não tem FINANCEIRO — nunca o IBAN real.
+        assertThat(empresaSemFinanceiro.get("iban").isNull()).isTrue();
+        assertThat(empresaSemFinanceiro.get("swift").isNull()).isTrue();
+        assertThat(empresaSemFinanceiro.get("bankName").isNull()).isTrue();
+
+        // 2. Com FINANCEIRO — acesso permitido, tal como já era no endpoint de uma única empresa.
+        String comFinanceiroToken = login("assessor.financeiro@kixima.co.ao");
+        mockMvc.perform(get("/api/companies").header("Authorization", "Bearer " + comFinanceiroToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + companyId + "')].iban").value("AO06004000001234567890123"))
+                .andExpect(jsonPath("$[?(@.id == '" + companyId + "')].swift").value("BAIAAOLU"));
+
+        // 3. Um assessor só com CADASTRO continua bloqueado do endpoint singular, como já era — não se removeu esse acesso.
+        mockMvc.perform(get("/api/companies/" + companyId + "/bank-details").header("Authorization", "Bearer " + semFinanceiroToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/companies/" + companyId + "/bank-details").header("Authorization", "Bearer " + comFinanceiroToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.iban").value("AO06004000001234567890123"));
     }
 
     @Test

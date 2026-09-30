@@ -14,6 +14,8 @@ import ao.kixima.plan.PlanService;
 import ao.kixima.policy.KiximaToClientPolicyRepository;
 import ao.kixima.policy.dto.ClientPolicyDto;
 import ao.kixima.policy.dto.SupplierPolicyDto;
+import ao.kixima.security.AdminArea;
+import ao.kixima.security.CurrentUser;
 import ao.kixima.security.PersonaRole;
 import ao.kixima.storage.StorageService;
 import ao.kixima.user.PasswordPolicy;
@@ -256,7 +258,7 @@ public class CompanyService {
     }
 
     @Transactional(readOnly = true)
-    public List<CompanyDto> listCompanies(String statusBruto, String typeBruto, String comSubscricao) {
+    public List<CompanyDto> listCompanies(String statusBruto, String typeBruto, String comSubscricao, CurrentUser user) {
         CompanyStatus status = vazio(statusBruto) ? null : enumOu(CompanyStatus.class, statusBruto, "status");
         CompanyType type = vazio(typeBruto) ? null : enumOu(CompanyType.class, typeBruto, "type");
         List<Company> companies;
@@ -266,10 +268,21 @@ public class CompanyService {
         else companies = companyRepository.findAllByOrderByCreatedAtDesc();
 
         // A subscrição só vem quando é pedida — quem só quer a lista não paga a contagem.
-        if (!"true".equals(comSubscricao)) return companies.stream().map(CompanyDto::de).toList();
-        Map<String, SubscriptionDto> subs = subscriptionsFor(companies);
-        // `subscricao: subs.get(c.id) || null` — a chave sai sempre nesta listagem.
-        return companies.stream().map(c -> CompanyDto.de(c, null, null, null, null, Optional.ofNullable(subs.get(c.getId())))).toList();
+        List<CompanyDto> dtos;
+        if (!"true".equals(comSubscricao)) {
+            dtos = companies.stream().map(CompanyDto::de).toList();
+        } else {
+            Map<String, SubscriptionDto> subs = subscriptionsFor(companies);
+            // `subscricao: subs.get(c.id) || null` — a chave sai sempre nesta listagem.
+            dtos = companies.stream().map(c -> CompanyDto.de(c, null, null, null, null, Optional.ofNullable(subs.get(c.getId())))).toList();
+        }
+        // Esta listagem só exige a área CADASTRO (@RequirePermission no controller) — dados
+        // bancários (bankName/iban/swift) são da área FINANCEIRO, exigida à parte pelo
+        // endpoint de uma única empresa (/{id}/bank-details). Sem isto, um assessor com
+        // só CADASTRO recebia o IBAN/SWIFT de todas as empresas de uma vez — achado da
+        // auditoria de segurança. Mesma regra do RbacAspect: adminAreas vazio = Super Admin.
+        boolean temFinanceiro = user.adminAreas() == null || user.adminAreas().isEmpty() || user.adminAreas().contains(AdminArea.FINANCEIRO);
+        return temFinanceiro ? dtos : dtos.stream().map(CompanyDto::semDadosBancarios).toList();
     }
 
     private static <E extends Enum<E>> E enumOu(Class<E> tipo, String v, String campo) {

@@ -28,7 +28,16 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, St
     /** `include: { callOffs: { orderBy: { createdAt: 'desc' } } }` de getContract. */
     List<PurchaseOrder> findByContractIdOrderByCreatedAtDesc(String contractId);
 
-    /** Reivindicação atómica de estado (callbacks ERP concorrentes): bloqueia a linha até ao fim da transação. */
+    /**
+     * Reivindicação atómica de estado: bloqueia a linha até ao fim da
+     * transação. Usado pelos callbacks do ERP (concorrentes entre si) e por
+     * todas as transições humanas de estado da PO em PoService (aprovar,
+     * rejeitar, aceitar, recusar, despachar, entregar, confirmar receção,
+     * resolver divergência) — duas chamadas concorrentes à mesma transição
+     * serializam aqui; a segunda só lê depois da primeira committar, e a sua
+     * própria verificação de estado (já feita por quem chama) passa a ver o
+     * estado NOVO, não o antigo.
+     */
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT po FROM PurchaseOrder po WHERE po.id = :id")
     java.util.Optional<PurchaseOrder> findByIdParaAtualizar(@Param("id") String id);

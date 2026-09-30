@@ -22,7 +22,9 @@ class EnvJwtSecretProducaoTest {
         List<String> props = new ArrayList<>(List.of(
                 "spring.profiles.active=prod",
                 "kixima.storage.provider=s3", "kixima.storage.bucket=kixima",
-                "kixima.storage.access-key=ak", "kixima.storage.secret-key=sk"));
+                "kixima.storage.access-key=ak", "kixima.storage.secret-key=sk",
+                // Este ficheiro testa só o JWT_SECRET — CORS/cookie têm o seu próprio ficheiro.
+                "kixima.app-url=https://kixima.example.com"));
         env.forEach((k, v) -> props.add(k + "=" + v));
         return new ApplicationContextRunner()
                 .withUserConfiguration(ProducaoStartupGuard.class)

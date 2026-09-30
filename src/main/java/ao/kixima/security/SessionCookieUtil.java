@@ -3,15 +3,17 @@ package ao.kixima.security;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
  * Espelha backend/src/utils/sessionCookie.js — a sessão viaja num cookie
- * httpOnly (`kixima_sessao`), SameSite=Lax, Secure só em produção, com a
- * mesma validade do próprio JWT. O Bearer continua aceite à parte (ver
- * {@link AuthenticationFilter}) — não é backdoor, serve clientes
- * programáticos e os testes, tal como no Node.
+ * httpOnly (`kixima_sessao`), SameSite=Lax, com a mesma validade do próprio
+ * JWT. Secure fica ligado por omissão — só desliga com o perfil "dev"/"test"
+ * explicitamente activo (nunca por ausência de perfil, ver o construtor). O
+ * Bearer continua aceite à parte (ver {@link AuthenticationFilter}) — não é
+ * backdoor, serve clientes programáticos e os testes, tal como no Node.
  */
 @Component
 public class SessionCookieUtil {
@@ -21,10 +23,17 @@ public class SessionCookieUtil {
     private final JwtService jwtService;
     private final boolean secure;
 
-    public SessionCookieUtil(JwtService jwtService,
-                              @Value("${spring.profiles.active:}") String activeProfiles) {
+    public SessionCookieUtil(JwtService jwtService, Environment environment) {
         this.jwtService = jwtService;
-        this.secure = activeProfiles.contains("prod");
+        // Secure por omissão — só desliga com "dev"/"test" explícitos (o
+        // mesmo critério de CorsOrigins). Um perfil ausente/mal configurado
+        // nunca deve resultar num cookie de sessão que viaje por HTTP.
+        this.secure = !environment.acceptsProfiles(Profiles.of("dev", "test"));
+    }
+
+    /** Exposto para o guardião de arranque (ProducaoStartupGuard) e para testes. */
+    public boolean isSecure() {
+        return secure;
     }
 
     public void definir(HttpServletResponse res, String token) {

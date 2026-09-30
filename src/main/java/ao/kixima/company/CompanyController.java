@@ -116,7 +116,7 @@ public class CompanyController {
     @RequirePermission(CADASTRO)
     public List<CompanyDto> list(@RequestParam(required = false) String status, @RequestParam(required = false) String type,
                                  @RequestParam(required = false) String comSubscricao) {
-        return companyService.listCompanies(status, type, comSubscricao);
+        return companyService.listCompanies(status, type, comSubscricao, CurrentUserHolder.get());
     }
 
     @PutMapping("/{id}/plan")

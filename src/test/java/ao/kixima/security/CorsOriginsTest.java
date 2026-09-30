@@ -1,6 +1,7 @@
 package ao.kixima.security;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -55,5 +56,34 @@ class CorsOriginsTest {
         assertThat(producao.origin(APP_URL)).isTrue();
         assertThat(producao.origin("capacitor://localhost")).isTrue();
         assertThat(producao.origin("https://parceiro.example.com")).isTrue();
+    }
+
+    // --- Achado da auditoria: o construtor @Autowired NÃO pode tratar "nenhum
+    // perfil activo" como desenvolvimento — ver CorsOriginsTest vs. EnvCorsProducaoTest. ---
+
+    private static CorsOrigins comPerfis(String... perfis) {
+        MockEnvironment env = new MockEnvironment();
+        if (perfis.length > 0) env.setActiveProfiles(perfis);
+        return new CorsOrigins(APP_URL, "", env);
+    }
+
+    @Test
+    void semNenhumPerfilActivoNaoEQualquerOrigemAceite() {
+        // Antes da correcção: SPRING_PROFILES_ACTIVE por definir caía no perfil
+        // "default" do Spring, e "default" estava na lista de perfis permissivos.
+        CorsOrigins semPerfil = comPerfis();
+        assertThat(semPerfil.origin("https://atacante.example.com")).isFalse();
+        assertThat(semPerfil.origin(APP_URL)).isTrue();
+    }
+
+    @Test
+    void comPerfilProdQualquerOrigemContinuaRecusada() {
+        assertThat(comPerfis("prod").origin("https://atacante.example.com")).isFalse();
+    }
+
+    @Test
+    void comPerfilDevOuTestExplicitoQualquerOrigemEAceite() {
+        assertThat(comPerfis("dev").origin("https://qualquer-coisa.example.com")).isTrue();
+        assertThat(comPerfis("test").origin("https://qualquer-coisa.example.com")).isTrue();
     }
 }
