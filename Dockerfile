@@ -24,7 +24,12 @@ COPY pom.xml .
 # pom.xml mudar, não a cada alteração de código.
 RUN mvn -B -q dependency:go-offline
 COPY src src
-RUN mvn -B -q -o package -DskipTests
+# Sem "-o" (offline) aqui de propósito: dependency:go-offline não garante
+# resolver 100% do grafo (ex.: algumas dependências de âmbito "test" só
+# usadas por certos plugins) — validado a ir a baixo com "-o" mesmo com
+# rede disponível. A cache da camada anterior já evita a maior parte do
+# tráfego repetido; esta camada só reconfirma o que falta.
+RUN mvn -B -q package -DskipTests
 
 # --- runtime ---
 FROM eclipse-temurin:21-jre-alpine AS runtime
