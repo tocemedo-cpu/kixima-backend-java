@@ -1,0 +1,9 @@
+target/
+uploads/
+src/main/resources/chave/*
+!src/main/resources/chave/.gitkeep
+.git/
+.env
+.env.*
+*.md
+docs/
