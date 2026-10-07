@@ -190,6 +190,85 @@ class PoControllerTest {
                 .andExpect(jsonPath("$[?(@.id=='" + poId + "')]").exists());
     }
 
+    /**
+     * Achado da auditoria do frontend: `?invoiced=true` e `?page=&limit=` eram
+     * ignorados (findPurchaseOrders só lia `status`), e a listagem nunca tinha
+     * envelope — pages/fornecedor/Invoices.jsx lê `data.items`/`data.page`/
+     * `data.pages`/`data.total`, que ficavam `undefined`. Espelha
+     * poService.js:245-267: sem `page` continua array nu; com `page`, envelope.
+     */
+    @Test
+    void listagemComInvoicedEPaginacao() throws Exception {
+        String supplierCompanyId = supplierCompanyId();
+        String productId = productId(supplierCompanyId);
+
+        String compradorToken = login(COMPRADOR_EMAIL);
+        String companyAdminToken = login(COMPANY_ADMIN_EMAIL);
+        String fornecedorToken = login(FORNECEDOR_EMAIL);
+
+        // PO 1 — leva até à aceitação, que gera a fatura (ver o teste acima).
+        String poComFaturaId = criarPo(compradorToken, supplierCompanyId, productId);
+        mockMvc.perform(patch("/api/purchase-orders/" + poComFaturaId + "/approve")
+                        .header("Authorization", "Bearer " + companyAdminToken))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(patch("/api/purchase-orders/" + poComFaturaId + "/accept")
+                        .header("Authorization", "Bearer " + fornecedorToken))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        // PO 2 — fica em AGUARDANDO_APROVACAO, sem fatura.
+        String poSemFaturaId = criarPo(compradorToken, supplierCompanyId, productId);
+        entityManager.flush();
+        entityManager.clear();
+
+        // `invoiced=true` (sem `page`): array nu, só a PO com fatura.
+        mockMvc.perform(get("/api/purchase-orders").param("invoiced", "true")
+                        .header("Authorization", "Bearer " + fornecedorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='" + poComFaturaId + "')]").exists())
+                .andExpect(jsonPath("$[?(@.id=='" + poSemFaturaId + "')]").doesNotExist());
+
+        // `page`+`limit` (sem `invoiced`): envelope — a PO sem fatura tem de aparecer
+        // em algum lado das páginas, confirmando que pedir página não aplica o filtro sozinho.
+        var pagina = mockMvc.perform(get("/api/purchase-orders").param("page", "1").param("limit", "1")
+                        .header("Authorization", "Bearer " + fornecedorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.limit").value(1))
+                .andExpect(jsonPath("$.pages").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)))
+                .andExpect(jsonPath("$.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)))
+                .andReturn();
+        int pages = objectMapper.readTree(pagina.getResponse().getContentAsString()).get("pages").asInt();
+
+        // `invoiced=true` + paginação juntos: o total paginado já só conta a PO com fatura.
+        mockMvc.perform(get("/api/purchase-orders").param("invoiced", "true").param("page", "1").param("limit", "50")
+                        .header("Authorization", "Bearer " + fornecedorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='" + poComFaturaId + "')]").exists())
+                .andExpect(jsonPath("$.items[?(@.id=='" + poSemFaturaId + "')]").doesNotExist());
+
+        assertEquals(pages, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM purchase_orders WHERE supplier_company_id = ?", Integer.class, supplierCompanyId));
+    }
+
+    private String criarPo(String compradorToken, String supplierCompanyId, String productId) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "supplierCompanyId", supplierCompanyId,
+                "items", List.of(Map.of("productId", productId, "quantity", 1))));
+        var res = mockMvc.perform(post("/api/purchase-orders")
+                        .header("Authorization", "Bearer " + compradorToken)
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asText();
+    }
+
     @Test
     void naoPodeComprarDaPropriaEmpresa() throws Exception {
         String buyerCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);

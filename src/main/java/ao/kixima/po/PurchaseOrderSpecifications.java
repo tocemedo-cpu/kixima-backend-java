@@ -13,7 +13,7 @@ final class PurchaseOrderSpecifications {
     private PurchaseOrderSpecifications() {
     }
 
-    static Specification<PurchaseOrder> paraListagem(String companyId, PersonaRole role, PoStatus status) {
+    static Specification<PurchaseOrder> paraListagem(String companyId, PersonaRole role, PoStatus status, Boolean invoiced) {
         return (root, query, cb) -> {
             List<Predicate> conditions = new ArrayList<>();
             if (status != null) conditions.add(cb.equal(root.get("status"), status));
@@ -27,6 +27,9 @@ final class PurchaseOrderSpecifications {
                         cb.equal(root.get("buyerCompanyId"), companyId),
                         cb.equal(root.get("supplierCompanyId"), companyId)));
             }
+            // `if (invoiced) where.invoice = { isNot: null }` — só filtra quando true;
+            // omitido ou false não restringe (o Node nunca pede o oposto, "sem fatura").
+            if (Boolean.TRUE.equals(invoiced)) conditions.add(cb.isNotNull(root.get("invoice")));
             return cb.and(conditions.toArray(new Predicate[0]));
         };
     }

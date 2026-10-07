@@ -406,7 +406,7 @@ public class PoService {
 
     @Transactional(readOnly = true)
     public List<PurchaseOrder> listPurchaseOrders(String companyId, PersonaRole role, PoStatus status) {
-        return purchaseOrderRepository.findAll(PurchaseOrderSpecifications.paraListagem(companyId, role, status),
+        return purchaseOrderRepository.findAll(PurchaseOrderSpecifications.paraListagem(companyId, role, status, null),
                 org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
     }
 

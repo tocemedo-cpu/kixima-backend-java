@@ -61,13 +61,42 @@ public class PoDtoService {
         return PurchaseOrderDto.de(carregar(id));
     }
 
-    /** listPurchaseOrders: `include: { items: true, invoice: { include: { payment: true } } }`, por createdAt desc. */
+    /**
+     * listPurchaseOrders: `include: { items: true, invoice: { include: { payment: true } } }`,
+     * por createdAt desc. Sem `page` devolve a lista completa (compatível com os
+     * consumidores existentes); com `page`, paginação server-side com envelope
+     * (poService.js:255-267) — ver {@link ao.kixima.po.dto.PurchaseOrderPageDto}.
+     */
     @Transactional(readOnly = true)
     public List<PurchaseOrderDto> listagem(String companyId, PersonaRole role, PoStatus status) {
-        return purchaseOrderRepository.findAll(PurchaseOrderSpecifications.paraListagem(companyId, role, status),
+        return listagem(companyId, role, status, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PurchaseOrderDto> listagem(String companyId, PersonaRole role, PoStatus status, Boolean invoiced) {
+        var spec = PurchaseOrderSpecifications.paraListagem(companyId, role, status, invoiced);
+        return purchaseOrderRepository.findAll(spec,
                         org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"))
-                .stream().map(po -> PurchaseOrderDto.de(po, itens(po, false), faturaResumida(po.getInvoice()), null, null, null, null, null))
+                .stream().map(this::paraListagemDto)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ao.kixima.po.dto.PurchaseOrderPageDto listagemPaginada(String companyId, PersonaRole role, PoStatus status,
+                                                                    Boolean invoiced, Integer page, Integer limit) {
+        var spec = PurchaseOrderSpecifications.paraListagem(companyId, role, status, invoiced);
+        int take = Math.min(Math.max(1, limit == null ? 15 : limit), 50);
+        int current = Math.max(1, page == null ? 1 : page);
+        var pageable = org.springframework.data.domain.PageRequest.of(current - 1, take,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        var resultado = purchaseOrderRepository.findAll(spec, pageable);
+        List<PurchaseOrderDto> itens = resultado.getContent().stream().map(this::paraListagemDto).toList();
+        int pages = Math.max(1, (int) Math.ceil((double) resultado.getTotalElements() / take));
+        return new ao.kixima.po.dto.PurchaseOrderPageDto(itens, resultado.getTotalElements(), current, pages, take);
+    }
+
+    private PurchaseOrderDto paraListagemDto(PurchaseOrder po) {
+        return PurchaseOrderDto.de(po, itens(po, false), faturaResumida(po.getInvoice()), null, null, null, null, null);
     }
 
     /**
