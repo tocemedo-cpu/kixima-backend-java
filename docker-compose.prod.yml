@@ -1,0 +1,74 @@
+# Ponto de partida para correr Postgres + MinIO + este serviço numa única
+# máquina. Não substitui uma orquestração maior (Kubernetes, etc.) — ver
+# README.md ("Produção standalone"). Lê as variáveis de .env (copia de
+# .env.example e preenche antes de correr `docker compose up`).
+#
+# Primeiro arranque: deixa FLYWAY_ENABLED=true no .env (aplica o schema numa
+# base vazia); os arranques seguintes podem deixar ligado sem risco —
+# ddl-auto: validate garante que nunca corre contra um schema inesperado.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-kixima_java}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: kixima_java
+    volumes:
+      - kixima_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-kixima_java} -d kixima_java"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY}
+    volumes:
+      - kixima_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Corre uma vez, cria o bucket se ainda não existir, e sai — ver
+  # docs/provisionamento-minio.md para o equivalente manual.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set kixima http://minio:9000 ${STORAGE_ACCESS_KEY} ${STORAGE_SECRET_KEY} &&
+        mc mb --ignore-existing kixima/${STORAGE_BUCKET:-kixima-ficheiros}
+      "
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "${PORT:-4001}:4001"
+    env_file:
+      - .env
+    environment:
+      # Nomes de serviço do compose, não os de docs/*.md (que assumem
+      # contentores soltos fora de uma stack compose).
+      DATABASE_URL_JDBC: jdbc:postgresql://postgres:5432/kixima_java
+      STORAGE_ENDPOINT: http://minio:9000
+
+volumes:
+  kixima_postgres_data:
+  kixima_minio_data:

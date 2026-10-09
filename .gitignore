@@ -13,3 +13,4 @@ src/main/resources/chave/*
 
 .env
 .env.*
+!.env.example

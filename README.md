@@ -152,7 +152,31 @@ seguintes, que o schema na base bate certo com as 47 entidades JPA — se
 alguém alterar a base por fora, a aplicação recusa-se a arrancar em vez de
 servir pedidos contra um schema inesperado.
 
-### 3. Imagem de contentor
+### 3. Armazenamento — MinIO auto-hospedado
+
+`ProducaoStartupGuard` exige `STORAGE_PROVIDER=s3` (ver `StorageService.java`)
+porque o disco do contentor é efémero — qualquer ficheiro em modo `local`
+desaparece no deploy seguinte. Isto **não** significa ter de contratar um
+serviço de nuvem: `STORAGE_ENDPOINT`/`STORAGE_FORCE_PATH_STYLE` já existem
+exactamente para apontar o mesmo cliente S3 a um MinIO auto-hospedado, sem
+qualquer alteração de código — ver **`docs/provisionamento-minio.md`** para o
+procedimento completo (contentor, bucket, variáveis). Resumo:
+
+```
+STORAGE_PROVIDER=s3
+STORAGE_BUCKET=kixima-ficheiros
+STORAGE_ACCESS_KEY=<utilizador-raiz-do-minio>
+STORAGE_SECRET_KEY=<senha-raiz-do-minio>
+STORAGE_ENDPOINT=http://minio:9000
+STORAGE_REGION=us-east-1
+STORAGE_FORCE_PATH_STYLE=true
+```
+
+Como o Postgres, o MinIO precisa de volume persistente próprio — perder esse
+volume é perder os ficheiros, exactamente como perder o volume da base de
+dados é perder as linhas.
+
+### 4. Imagem de contentor
 
 O `Dockerfile` na raiz do repositório produz uma imagem standalone
 (multi-stage: `maven:3.9-eclipse-temurin-21` para compilar,
@@ -169,15 +193,22 @@ docker run -p 4001:4001 \
   -e JWT_SECRET=... \
   -e APP_URL=https://... \
   -e STORAGE_PROVIDER=s3 -e STORAGE_BUCKET=... -e STORAGE_ACCESS_KEY=... -e STORAGE_SECRET_KEY=... \
+  -e STORAGE_ENDPOINT=http://minio:9000 -e STORAGE_FORCE_PATH_STYLE=true \
   kixima-backend-java
 ```
+
+Também há `docker-compose.prod.yml` na raiz, que já junta Postgres + MinIO +
+este serviço — ver `.env.example` para a lista completa de variáveis (as
+obrigatórias e as que só se aplicam a cada funcionalidade opcional).
 
 Funciona da mesma forma sem Docker, com `mvn package` + `java -jar
 target/kixima-backend-java-*.jar` e as mesmas variáveis de ambiente.
 
 Não existe `render.yaml` neste repositório (de propósito — ver tabela
-acima); a orquestração (systemd, Kubernetes, docker-compose, o painel de um
-PaaS à tua escolha) fica fora do âmbito deste projecto.
+acima). `docker-compose.prod.yml` é só um ponto de partida funcional para
+quem quer correr tudo numa única máquina (Postgres + MinIO + este serviço);
+uma orquestração maior (Kubernetes, o painel de um PaaS à escolha) continua
+fora do âmbito deste projecto.
 
 ## Estrutura
 
