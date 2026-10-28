@@ -116,7 +116,7 @@ kixima:
       valor-usd: ${KIXIMA_PRECO_ADDON_PO_ROBOT_USD:200}
       periodo: ${KIXIMA_PRECO_ADDON_PO_ROBOT_PERIODO:MENSAL}
   auth:
-    jwt-secret: ${JWT_SECRET:}
+    jwt-secret: ${JWT_SECRET:JefdY6MG/89qm/eNP6iZ00f2yjiGkcQ+almZRS0U0IU=}
     jwt-expires-in: ${JWT_EXPIRES_IN:1d}
     mfa-required-roles: ${MFA_REQUIRED_ROLES:ADMIN_SISTEMA,COMPANY_ADMIN}
     mfa-enforce-from: ${MFA_ENFORCE_FROM:}
