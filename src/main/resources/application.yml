@@ -8,7 +8,7 @@ spring:
     # Ver README.md para a origem do schema desta base de dados.
     url: ${DATABASE_URL_JDBC:jdbc:postgresql://db_kixima:5432/kixima}
     username: ${DATABASE_USER:kixima}
-    password: ${DATABASE_SelectServices_2034!!}
+    password: ${DATABASE_PASSWORD:SelectServices_2034!!}
     hikari:
       # Pool pequeno por omissão — ajustar com DB_POOL_MAX conforme o plano
       # do Postgres em produção.
