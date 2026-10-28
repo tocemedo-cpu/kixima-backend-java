@@ -1,6 +1,8 @@
 package ao.kixima.realtime;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -39,6 +41,26 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final RealtimeHandshakeInterceptor realtimeHandshakeInterceptor;
     private final CorsOrigins origens;
 
+    /**
+     * Agendador PRIVADO dos heartbeats do broker. De propósito não é um {@code @Bean}: um TaskScheduler no
+     * contexto faria o Spring Boot desistir do seu agendador por omissão, e os jobs {@code @Scheduled}
+     * passariam a correr nesta thread única.
+     */
+    private final ThreadPoolTaskScheduler heartbeatScheduler = criarHeartbeatScheduler();
+
+    private static ThreadPoolTaskScheduler criarHeartbeatScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("stomp-heartbeat-");
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    @PreDestroy
+    void encerrarHeartbeat() {
+        heartbeatScheduler.shutdown();
+    }
+
     public WebSocketConfig(RealtimeAuthInterceptor realtimeAuthInterceptor,
                             RealtimeHandshakeInterceptor realtimeHandshakeInterceptor,
                             CorsOrigins origens) {
@@ -66,7 +88,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic", "/queue");
+        // Heartbeats a cada 10 s nos dois sentidos: sem eles uma ligação parada (ninguém a escrever no chat) é
+        // fechada em silêncio pelo proxy do Render por inatividade, e o frontend só dava por isso ao falhar.
+        // O Socket.IO do Node fazia o equivalente com os seus pings.
+        registry.enableSimpleBroker("/topic", "/queue")
+                .setHeartbeatValue(new long[]{10_000, 10_000})
+                .setTaskScheduler(heartbeatScheduler);
         registry.setUserDestinationPrefix("/user");
         registry.setApplicationDestinationPrefixes("/app");
     }

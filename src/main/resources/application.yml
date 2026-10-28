@@ -13,6 +13,12 @@ spring:
       # Pool pequeno por omissão — ajustar com DB_POOL_MAX conforme o plano
       # do Postgres em produção.
       maximum-pool-size: ${DB_POOL_MAX:5}
+      # Quanto um pedido espera por uma ligação ANTES de falhar. O valor por omissão do Hikari (30 s) fazia
+      # com que, com a base inacessível (parada, rede, senha recusada), um simples login ficasse pendurado
+      # mais de 30 s até um proxy desistir e só depois devolvesse um erro sem explicação. Com 5 s falha depressa,
+      # como 503 (GlobalExceptionHandler.baseIndisponivel), e a causa real fica no registo. Sobe-se com
+      # DB_CONNECTION_TIMEOUT_MS se a rede até à base for lenta.
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
 
   jpa:
     hibernate:

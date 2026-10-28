@@ -92,6 +92,24 @@ completa — está tudo documentado inline):
 | `AGT_*` | Assinatura e submissão de documentos fiscais (Angola, AGT) |
 | `KIXIMA_JOB_*_ENABLED` | Jobs agendados — **todos desligados por omissão**, ver abaixo |
 | `SPRING_PROFILES_ACTIVE` | `prod` em produção (ver secção "Produção standalone" abaixo) |
+| `DB_CONNECTION_TIMEOUT_MS` | Quanto um pedido espera por uma ligação à base antes de falhar (omissão 5000) |
+
+### Ligar o frontend (`kixima-frontend-java`) em desenvolvimento
+
+O frontend corre em `http://localhost:5173` e o Vite reencaminha `/api` e `/ws`
+para este backend (porta 4001). Para o browser e o handshake STOMP serem aceites:
+
+1. Arranca **com o perfil `dev`** (`SPRING_PROFILES_ACTIVE=dev`, ou o comando acima). Sem
+   nenhum perfil activo o CORS fica restrito como em produção, de propósito
+   (falha fechada), e tanto o preflight de `/api` como o handshake de `/ws`
+   respondem **403** à origem do Vite.
+2. Em produção não há perfil `dev`: define `APP_URL` (ou `CORS_ORIGINS`) com o
+   domínio real do frontend, senão o `ProducaoStartupGuard` recusa o arranque.
+
+Uma base de dados inacessível responde `503 SERVICO_INDISPONIVEL` (ao fim de
+`DB_CONNECTION_TIMEOUT_MS`), nunca um 500 genérico; um pedido inválido do cliente
+(Content-Type que não é JSON, parâmetro em falta ou com tipo errado) responde 422,
+e um método não permitido responde 404 `ROUTE_NOT_FOUND`.
 
 ## Jobs agendados — desligados por omissão
 

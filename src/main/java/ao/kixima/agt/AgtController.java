@@ -107,7 +107,11 @@ public class AgtController {
     @GetMapping("/agt-serie-payload")
     @RequireRole({ADMIN_SISTEMA})
     @RequirePermission(FATURACAO)
-    public AgtSeriesService.ResultadoSolicitacao agtSeriePayload(@RequestParam Integer ano, @RequestParam String tipoDocumento) {
+    public AgtSeriesService.ResultadoSolicitacao agtSeriePayload(@RequestParam(required = false) String ano,
+                                                                  @RequestParam(required = false) String tipoDocumento) {
+        // Os dois parâmetros NÃO são `required` de propósito: com `required` o Spring recusava o pedido ANTES de
+        // o método (e do RbacAspect) correr — um parâmetro em falta dava 500 (agora 422) e um papel sem permissão
+        // via a validação antes do 403. No Node a ordem é: papel/área -> configuração AGT -> parâmetros.
         exigirSandboxAgtConfigurada();
         if (nif == null || nif.isBlank()) {
             throw new ServiceUnavailableException(
@@ -120,12 +124,21 @@ public class AgtController {
                             + "ambiente — sem ele não se pode gerar um pedido de série. Confirme o código correto junto da "
                             + "AGT para o NIF configurado (AGT_NIF) antes de o definir; nunca um valor adivinhado por tentativa.");
         }
-        if (ano == null) throw new ValidationException("Indique o ano da série (ano).");
+        // Equivalente a `!ano || !Number.isInteger(Number(ano))` do Node.
+        Integer anoSerie = null;
+        if (ano != null && !ano.isBlank()) {
+            try {
+                anoSerie = Integer.valueOf(ano.trim());
+            } catch (NumberFormatException e) {
+                anoSerie = null;
+            }
+        }
+        if (anoSerie == null) throw new ValidationException("Indique o ano da série (ano).");
         if (tipoDocumento == null || tipoDocumento.isBlank()) throw new ValidationException("Indique o tipo de documento (tipoDocumento).");
 
         CurrentUser user = CurrentUserHolder.get();
         return agtSeriesService.solicitarSerie(
-                new AgtSeriesService.ParametrosSerie(nif, ano, tipoDocumento.trim().toUpperCase(), establishmentNumber),
+                new AgtSeriesService.ParametrosSerie(nif, anoSerie, tipoDocumento.trim().toUpperCase(), establishmentNumber),
                 new AgtSeriesService.Contexto(user.id(), user.name()));
     }
 
