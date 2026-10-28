@@ -170,6 +170,16 @@ seguintes, que o schema na base bate certo com as 47 entidades JPA — se
 alguém alterar a base por fora, a aplicação recusa-se a arrancar em vez de
 servir pedidos contra um schema inesperado.
 
+**Erro `Schema-validation: missing table [addon_cobrancas]` no arranque** =
+a base de dados está vazia (é a primeira tabela que o Hibernate valida) e o
+Flyway está desligado. Define `FLYWAY_ENABLED=true` no serviço e volta a
+arrancar: o Flyway aplica o `V1__baseline.sql` (49 tabelas). Com
+`FLYWAY_ENABLED=true` numa base que **já tem** o schema mas nenhum histórico
+do Flyway (ex.: criada pelo Prisma), o Flyway apenas a marca como versão 1 e
+não executa nada (`baseline-version: 1`; coberto por `FlywayBaselineTest`).
+Se a base tiver só **parte** das tabelas, o Flyway não a repara — restaura-a
+de uma cópia completa ou aplica-lhe as migrações em falta.
+
 ### 3. Armazenamento — MinIO auto-hospedado
 
 `ProducaoStartupGuard` exige `STORAGE_PROVIDER=s3` (ver `StorageService.java`)

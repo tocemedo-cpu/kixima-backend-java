@@ -34,13 +34,19 @@ spring:
           time_zone: UTC
 
   flyway:
-    # Baseline sobre o schema já existente — nunca tenta recriar o histórico
-    # anterior a este projecto. Desligado por omissão (ver README.md sobre a
-    # posse das migrações); ligar com FLYWAY_ENABLED=true quando este projecto
-    # passar a ser dono das migrações.
+    # Desligado por omissão (ver README.md sobre a posse das migrações); ligar com
+    # FLYWAY_ENABLED=true quando este projecto passar a ser dono das migrações.
+    # SEM isto, uma base de dados VAZIA falha no arranque com
+    # "Schema-validation: missing table [addon_cobrancas]" (a primeira tabela que o
+    # Hibernate valida) — o ddl-auto é `validate`, nunca cria tabelas.
     enabled: ${FLYWAY_ENABLED:false}
+    # Base VAZIA: o Flyway aplica o V1__baseline.sql (schema completo).
+    # Base com schema mas SEM histórico do Flyway (ex.: criada pelo Prisma): é marcada
+    # como já estando na versão 1 e NADA é executado — o V1 não é repetido sobre tabelas
+    # que já existem. Com `baseline-version: 0` o V1 era reaplicado e falhava com
+    # "relation ... already exists". Ver FlywayBaselineTest.
     baseline-on-migrate: true
-    baseline-version: 0
+    baseline-version: 1
 
 spring.servlet.multipart.max-file-size: 25MB
 spring.servlet.multipart.max-request-size: 120MB
