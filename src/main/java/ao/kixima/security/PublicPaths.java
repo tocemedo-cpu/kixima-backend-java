@@ -73,6 +73,9 @@ public class PublicPaths {
         // publicRoutes.js — a parede pública de avaliações, só leitura.
         adicionar("GET", "/api/public/feedback");
         adicionar("GET", "/api/public/stats");
+        // Montra pública do catálogo (só leitura): visitantes sem conta exploram produtos, serviços e fornecedoras.
+        // Os endpoints devolvem um subconjunto seguro de campos — ver PublicCatalogController.
+        adicionar("GET", "/api/public/catalog/**");
         // Tabela de planos e preços — pública (planosRoutes.js).
         adicionar("GET", "/api/planos");
         // Callback dos canais de pagamento automático — quem chama é o gateway, não um utilizador (webhookPagamentoRoutes.js).

@@ -41,12 +41,12 @@ public class MarketplaceService {
     public record Filtros(String q, String category, String kind, List<String> certifications, String availability,
                           boolean verified, boolean promo, String country, String province, String city, String specialty,
                           Double minRating, BigDecimal minPrice, BigDecimal maxPrice, String sort, Integer page, Integer limit,
-                          String excludeSupplierId) {
+                          String excludeSupplierId, boolean soAprovadas) {
         Filtros sem(String campo) {
             return new Filtros("q".equals(campo) ? null : q, "category".equals(campo) ? null : category, "kind".equals(campo) ? null : kind,
                     "certifications".equals(campo) ? List.of() : certifications, availability, verified, promo,
                     "country".equals(campo) ? null : country, province, city, specialty, minRating,
-                    "price".equals(campo) ? null : minPrice, "price".equals(campo) ? null : maxPrice, sort, page, limit, excludeSupplierId);
+                    "price".equals(campo) ? null : minPrice, "price".equals(campo) ? null : maxPrice, sort, page, limit, excludeSupplierId, soAprovadas);
         }
     }
 
@@ -100,6 +100,8 @@ public class MarketplaceService {
         List<String> cond = new ArrayList<>();
         List<Object> params = new ArrayList<>();
         cond.add("p.active = true");
+        // Montra pública: só produtos de fornecedoras já credenciadas (o marketplace autenticado mantém o comportamento anterior).
+        if (f.soAprovadas()) cond.add("c.status = 'APROVADA'::\"CompanyStatus\"");
         if (f.kind() != null) {
             cond.add("p.kind = ?::\"ProductKind\"");
             params.add(f.kind());

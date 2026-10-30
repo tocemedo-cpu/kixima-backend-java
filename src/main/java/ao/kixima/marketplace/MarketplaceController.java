@@ -87,6 +87,12 @@ public class MarketplaceController {
     }
 
     private MarketplaceService.Filtros parseFilters(Map<String, String> q) {
+        CurrentUser user = CurrentUserHolder.get();
+        return parseFilters(q, user.role() == PersonaRole.COMPRADOR ? user.companyId() : null, false);
+    }
+
+    /** Validação partilhada com a montra pública ({@link PublicCatalogController}), que não tem utilizador. */
+    static MarketplaceService.Filtros parseFilters(Map<String, String> q, String excludeSupplierId, boolean soAprovadas) {
         Map<String, List<String>> erros = new LinkedHashMap<>();
         String texto = texto(q, "q", 120, erros);
         String category = texto(q, "category", 80, erros);
@@ -117,12 +123,10 @@ public class MarketplaceController {
         }
         List<String> certs = new ArrayList<>();
         if (certifications != null) for (String c : certifications.split(",")) if (!c.trim().isEmpty()) certs.add(c.trim());
-        CurrentUser user = CurrentUserHolder.get();
-        String excludeSupplierId = user.role() == PersonaRole.COMPRADOR ? user.companyId() : null;
         return new MarketplaceService.Filtros(texto == null ? null : texto.trim(), category, kind, certs, availability,
                 "true".equals(q.get("verified")), "true".equals(q.get("promo")), country, province, city, specialty, minRating,
                 minPrice == null ? null : BigDecimal.valueOf(minPrice), maxPrice == null ? null : BigDecimal.valueOf(maxPrice),
-                sort, page, limit, excludeSupplierId);
+                sort, page, limit, excludeSupplierId, soAprovadas);
     }
 
     @GetMapping("/search")
