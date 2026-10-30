@@ -16,6 +16,9 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: kixima_java
     volumes:
+      # Tem de ser /var/lib/postgresql/data (a pasta que as imagens postgres:16/17 declaram como VOLUME). Montar
+      # um nível acima (…:/var/lib/postgresql) deixa a base num volume anónimo e cria uma pasta «data» vazia dentro
+      # da pasta montada. Ver docker-stack.swarm.yml e docs/provisionamento-postgresql.md (secção 8).
       - kixima_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-kixima_java} -d kixima_java"]
@@ -67,6 +70,9 @@ services:
       # Nomes de serviço do compose, não os de docs/*.md (que assumem
       # contentores soltos fora de uma stack compose).
       DATABASE_URL_JDBC: jdbc:postgresql://postgres:5432/kixima_java
+      # Aplica o schema numa base vazia (sem isto: «Schema-validation: missing table [addon_cobrancas]»). Numa base que
+      # já tem o schema não repete nada. Para o desligar, FLYWAY_ENABLED=false no .env.
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
       STORAGE_ENDPOINT: http://minio:9000
 
 volumes:

@@ -1,0 +1,68 @@
+# Stack Docker Swarm de referência: PostgreSQL + backend. Uso:
+#
+#   export DATABASE_PASSWORD='<uma palavra-passe forte>'   # nunca a deixe escrita neste ficheiro
+#   export BACKEND_IMAGE=<a sua imagem do backend>
+#   docker stack deploy -c docker-stack.swarm.yml kixima
+#
+# ONDE O POSTGRES GUARDA OS DADOS (leia isto antes de mudar o volume)
+# --------------------------------------------------------------------
+# As imagens oficiais postgres:16 e postgres:17 guardam a base em /var/lib/postgresql/data e DECLARAM essa pasta como
+# VOLUME. Por isso o volume tem de ser montado EXACTAMENTE em /var/lib/postgresql/data.
+#
+# O erro típico é montar um nível acima (./data:/var/lib/postgresql). O Docker cria então, por baixo, um volume anónimo
+# em /var/lib/postgresql/data para onde vai a base de verdade; a pasta do host (./data) fica só com uma pasta vazia
+# «data» lá dentro — pasta dentro de pasta, e os dados fora do sítio que se julga. Num serviço Swarm cada nova tarefa
+# recebe um volume anónimo novo, e a base aparece VAZIA a cada actualização ou reinício (no backend:
+# «Schema-validation: missing table [addon_cobrancas]»).
+#
+# (A imagem postgres:18 mudou isto: aí a pasta de dados é /var/lib/postgresql/18/docker e o volume é montado em
+# /var/lib/postgresql. Não misture as duas convenções: use o ponto de montagem que corresponde à versão da imagem.)
+#
+# Num Swarm de um só nó, um volume nomeado local chega e é o mais seguro. Com vários nós, fixe a base a um nó
+# (placement.constraints) — um volume local não viaja entre nós.
+
+services:
+  db_kixima:
+    image: postgres:17.11
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-kixima}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?defina DATABASE_PASSWORD antes do deploy}
+      POSTGRES_DB: ${POSTGRES_DB:-kixima}
+      # É o valor por omissão; fica escrito para que ninguém o altere sem perceber o que muda.
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - kixima_pgdata:/var/lib/postgresql/data
+      # Alternativa: uma pasta do host (tem de existir ANTES do deploy: mkdir -p /opt/kixima/postgres).
+      # - /opt/kixima/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      # placement:
+      #   constraints: [node.hostname == <o-no-onde-esta-o-volume>]
+
+  kixima:
+    image: ${BACKEND_IMAGE:?defina BACKEND_IMAGE antes do deploy}
+    depends_on:
+      - db_kixima
+    environment:
+      DATABASE_URL_JDBC: jdbc:postgresql://db_kixima:5432/${POSTGRES_DB:-kixima}
+      DATABASE_USER: ${DATABASE_USER:-kixima}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?defina DATABASE_PASSWORD antes do deploy}
+      # Base vazia: o Flyway cria o schema (V1__baseline.sql). Numa base que já tem o schema só a marca como versão 1.
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
+      PORT: "4001"
+      # Em produção acrescente SPRING_PROFILES_ACTIVE=prod e as variáveis que o ProducaoStartupGuard exige
+      # (JWT_SECRET forte, APP_URL ou CORS_ORIGINS, STORAGE_PROVIDER=s3 + STORAGE_*). Ver README.md.
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  kixima_pgdata:

@@ -178,6 +178,44 @@ sucesso:
 
 ---
 
+## 8. Onde o PostgreSQL guarda os dados (e a pasta dentro de pasta)
+
+**Regra:** com `postgres:16` ou `postgres:17`, o volume monta-se em `/var/lib/postgresql/data`, nem mais acima nem mais abaixo.
+
+Essas imagens declaram `/var/lib/postgresql/data` como `VOLUME`. Se montar um nível acima
+(`./data:/var/lib/postgresql`), o Docker cria por baixo um **volume anónimo** nesse caminho e é aí que a base vai
+parar. Na pasta do host só aparece uma pasta `data` vazia (pasta dentro de pasta). Num serviço Swarm, cada tarefa nova
+recebe um volume anónimo novo, por isso a base aparece **vazia** depois de cada actualização ou reinício e o backend
+falha com `Schema-validation: missing table [addon_cobrancas]`.
+
+(A imagem `postgres:18` mudou a convenção: a pasta de dados é `/var/lib/postgresql/18/docker` e o volume monta-se em
+`/var/lib/postgresql`. Use o ponto de montagem que corresponde à versão da imagem.)
+
+### Confirmar onde estão os dados agora
+
+```bash
+docker exec -it <contentor-da-base> psql -U <utilizador> -d <base> -c "SHOW data_directory;" -c "\dt"
+docker inspect <contentor-da-base> --format '{{json .Mounts}}'
+```
+
+Se o `Mounts` mostrar um volume **sem nome** com `Destination: /var/lib/postgresql/data` ao lado do seu bind
+(`/var/lib/postgresql`), é este o caso: os dados estão no volume anónimo.
+
+### Corrigir sem perder dados
+
+1. **Copie primeiro, antes de mexer em nada:**
+   `docker exec <contentor-da-base> pg_dumpall -U <utilizador> > copia.sql`
+2. Corrija o volume para `/var/lib/postgresql/data` (ver `docker-stack.swarm.yml`) e volte a fazer o deploy.
+3. Se a base ficou vazia, restaure: `docker exec -i <contentor-da-base> psql -U <utilizador> -f - < copia.sql`.
+   Se não chegou a haver cópia, os dados antigos podem ainda estar num volume anónimo:
+   `docker volume ls -f dangling=true`, e `docker run --rm -v <volume>:/v alpine ls /v` (procure `PG_VERSION`).
+4. Só depois ligue o Flyway se a base for mesmo nova (secção 6).
+
+A palavra-passe da base nunca deve estar escrita no ficheiro da stack: passe-a por variável de ambiente
+(`DATABASE_PASSWORD`) ou por Docker secret, e mude a que já esteve em texto.
+
+---
+
 ## Resumo rápido (checklist)
 
 - [ ] `CREATE ROLE kixima_java WITH LOGIN PASSWORD '...'`
@@ -186,3 +224,4 @@ sucesso:
 - [ ] `DATABASE_URL_JDBC` / `DATABASE_USER` / `DATABASE_PASSWORD` definidas
 - [ ] `FLYWAY_ENABLED=true` definida
 - [ ] Primeiro arranque da aplicação → confirmar `flyway_schema_history` e `/ready`
+- [ ] Volume do Postgres montado em `/var/lib/postgresql/data` (imagens 16/17) — secção 8
