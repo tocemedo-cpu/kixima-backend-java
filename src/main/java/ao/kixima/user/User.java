@@ -84,6 +84,13 @@ public class User extends AbstractPersistableEntity<String> {
     @Column(name = "terms_accepted_at")
     private Instant termsAcceptedAt;
 
+    /**
+     * Confirmação do email da conta. As contas criadas por convite, pelo administrador ou pelo cadastro antigo nascem
+     * confirmadas (ver o construtor); só o registo em dois passos a limpa e exige a confirmação por link.
+     */
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
     // --- MFA ---------------------------------------------------------------
     @Column(name = "mfa_method")
     private String mfaMethod;
@@ -150,6 +157,19 @@ public class User extends AbstractPersistableEntity<String> {
         this.active = active;
         this.termsAcceptedAt = termsAcceptedAt;
         this.createdAt = createdAt;
+        this.emailVerifiedAt = createdAt;
+    }
+
+    public Instant getEmailVerifiedAt() {
+        return emailVerifiedAt;
+    }
+
+    public void setEmailVerifiedAt(Instant emailVerifiedAt) {
+        this.emailVerifiedAt = emailVerifiedAt;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerifiedAt != null;
     }
 
     // --- getters/setters -----------------------------------------------

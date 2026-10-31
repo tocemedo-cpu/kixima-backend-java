@@ -88,15 +88,26 @@ class FlywayBaselineTest {
         }
     }
 
+    private static boolean temColuna(Connection c, String tabela, String coluna) throws SQLException {
+        try (Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery("SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '" + tabela
+                     + "' AND column_name = '" + coluna + "'")) {
+            rs.next();
+            return rs.getInt(1) == 1;
+        }
+    }
+
     @Test
     void baseVaziaRecebeOSchemaCompleto() throws Exception {
         comBaseTemporaria(base -> {
             var resultado = flywayComAConfigDaAplicacao(base).migrate();
-            assertThat(resultado.migrationsExecuted).isEqualTo(1);
+            assertThat(resultado.migrationsExecuted).as("V1 (schema completo) e V2 (cadastro progressivo)").isEqualTo(2);
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD)) {
                 // addon_cobrancas é a tabela que o Hibernate reporta em falta numa base vazia.
                 assertThat(existe(c, "addon_cobrancas")).isTrue();
                 assertThat(existe(c, "users")).isTrue();
+                assertThat(temColuna(c, "users", "email_verified_at")).isTrue();
+                assertThat(temColuna(c, "companies", "onboarding_draft")).isTrue();
             } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }
@@ -121,9 +132,12 @@ class FlywayBaselineTest {
             Flyway flyway = flywayComAConfigDaAplicacao(base);
             var resultado = flyway.migrate(); // com baseline-version 0 isto falhava: "relation ... already exists"
 
-            assertThat(resultado.migrationsExecuted).as("nada deve ser reexecutado sobre um schema existente").isZero();
+            // A V1 não se repete (a base marca-se como V1); só as migrações seguintes correm — hoje a V2.
+            assertThat(resultado.migrationsExecuted).as("só a V2 corre sobre um schema existente; a V1 não é reexecutada").isEqualTo(1);
             MigrationInfo actual = flyway.info().current();
-            assertThat(actual.getVersion().getVersion()).isEqualTo("1");
+            assertThat(actual.getVersion().getVersion()).isEqualTo("2");
+            assertThat(java.util.Arrays.stream(flyway.info().applied()).filter(m -> "1".equals(m.getVersion().getVersion())).findFirst().orElseThrow().getType().name())
+                    .as("a V1 fica apenas como linha de base").isEqualTo("BASELINE");
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD); Statement st = c.createStatement();
                  ResultSet rs = st.executeQuery("SELECT id FROM marcador_dados")) {
                 assertThat(rs.next()).isTrue();

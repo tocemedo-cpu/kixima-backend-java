@@ -43,10 +43,11 @@ public class Company extends AbstractPersistableEntity<String> {
     @Id
     private String id;
 
-    @Column(nullable = false)
+    /** Vazio só enquanto o cadastro está em RASCUNHO (preenchido na 1.ª etapa do perfil). */
     private String name;
 
-    @Column(name = "tax_id", nullable = false, unique = true)
+    /** Vazio só enquanto o cadastro está em RASCUNHO. */
+    @Column(name = "tax_id", unique = true)
     private String taxId;
 
     @Enumerated(EnumType.STRING)
@@ -142,6 +143,18 @@ public class Company extends AbstractPersistableEntity<String> {
 
     @Column(name = "rejected_at")
     private Instant rejectedAt;
+
+    /** Quando o cadastro foi submetido para análise (a última vez). */
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+
+    /** Motivo indicado pela KIXIMA na última rejeição — mostrado ao utilizador para corrigir e voltar a submeter. */
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    /** Dados do cadastro ainda sem registo próprio (apólice da Prestadora), em JSON. Ver {@code OnboardingService}. */
+    @Column(name = "onboarding_draft")
+    private String onboardingDraft;
 
     @OneToMany(mappedBy = "company", fetch = jakarta.persistence.FetchType.LAZY)
     private List<User> users;
@@ -404,14 +417,61 @@ public class Company extends AbstractPersistableEntity<String> {
         return rejectedAt;
     }
 
-    /** `decideCompanyStatus`: APROVADA + approvedAt, ou REJEITADA + rejectedAt. */
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public void setProvince(String province) {
+        this.province = province;
+    }
+
+    public void setLogoUrl(String logoUrl) {
+        this.logoUrl = logoUrl;
+    }
+
+    public Instant getSubmittedAt() {
+        return submittedAt;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public String getOnboardingDraft() {
+        return onboardingDraft;
+    }
+
+    public void setOnboardingDraft(String onboardingDraft) {
+        this.onboardingDraft = onboardingDraft;
+    }
+
+    /** O perfil ainda pode ser editado pelo utilizador: em preenchimento, ou rejeitado e à espera de correcção. */
+    public boolean editavelNoCadastro() {
+        return status == CompanyStatus.RASCUNHO || status == CompanyStatus.REJEITADA;
+    }
+
+    /** Submissão para análise da KIXIMA: PENDENTE, e o motivo de uma rejeição anterior deixa de se aplicar. */
+    public void submeter(Instant agora) {
+        this.status = CompanyStatus.PENDENTE;
+        this.submittedAt = agora;
+        this.rejectionReason = null;
+        this.rejectedAt = null;
+    }
+
+    /** `decideCompanyStatus`: APROVADA + approvedAt, ou REJEITADA + rejectedAt (+ motivo, quando indicado). */
     public void decidir(boolean approve, Instant agora) {
+        decidir(approve, agora, null);
+    }
+
+    public void decidir(boolean approve, Instant agora, String motivo) {
         if (approve) {
             this.status = CompanyStatus.APROVADA;
             this.approvedAt = agora;
+            this.rejectionReason = null;
         } else {
             this.status = CompanyStatus.REJEITADA;
             this.rejectedAt = agora;
+            this.rejectionReason = motivo == null || motivo.isBlank() ? null : motivo.trim();
         }
     }
 }

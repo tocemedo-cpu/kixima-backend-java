@@ -202,7 +202,7 @@ public class CompanyController {
     @RequireRole({ADMIN_SISTEMA})
     @RequirePermission(CADASTRO)
     public CompanyDto decide(@PathVariable String id, @Valid @RequestBody CompanyRequests.Decide body, HttpServletRequest req) {
-        CompanyDto company = companyService.decideCompanyStatus(id, body.approve());
+        CompanyDto company = companyService.decideCompanyStatus(id, body.approve(), body.rejectionReason());
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("decisao", body.approve() ? "APROVADA" : "REJEITADA");
         detail.put("motivo", body.rejectionReason());

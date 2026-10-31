@@ -111,7 +111,8 @@ public class RealtimeAuthInterceptor implements ChannelInterceptor {
         return new RealtimePrincipal(new CurrentUser(user.getId(), user.getRole(), user.getAdminAreas(), user.getCompanyId(),
                 user.getCompany() == null ? null : user.getCompany().getType(),
                 user.getCompany() == null ? null : user.getCompany().getPlan(),
-                user.getApprovalCap(), user.getName(), user.getEmail(), user.getAvatarUrl(), false, false, null));
+                user.getApprovalCap(), user.getName(), user.getEmail(), user.getAvatarUrl(), false, false, null,
+                user.getCompany() == null ? null : user.getCompany().getStatus()));
     }
 
     private void autorizarSala(StompHeaderAccessor accessor) {

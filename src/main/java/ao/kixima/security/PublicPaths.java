@@ -39,6 +39,10 @@ public class PublicPaths {
         adicionar("/api/auth/reset-password");
         adicionar("/api/auth/2fa/verify");
         adicionar("/api/auth/2fa/reenviar");
+        // Registo em dois passos: criar a conta, confirmar o email e pedir novo email de confirmação — antes de haver sessão.
+        adicionar("POST", "/api/auth/register");
+        adicionar("POST", "/api/auth/verify-email");
+        adicionar("POST", "/api/auth/resend-verification");
         adicionar("/actuator/health");
         // app.js — sondas de saúde, sem sessão.
         adicionar("GET", "/health");

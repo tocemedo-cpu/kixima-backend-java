@@ -50,10 +50,10 @@ import java.util.UUID;
 public class CompanyService {
 
     /** Documentos obrigatórios por tipo de empresa (secção 4.1). */
-    private static final Map<CompanyType, List<DocumentType>> REQUIRED_DOCS = new EnumMap<>(Map.of(
+    static final Map<CompanyType, List<DocumentType>> REQUIRED_DOCS = new EnumMap<>(Map.of(
             CompanyType.CLIENTE, List.of(DocumentType.CERTIDAO_COMERCIAL, DocumentType.ALVARA_COMERCIAL),
             CompanyType.FORNECEDOR, List.of(DocumentType.ALVARA_COMERCIAL, DocumentType.LICENCA_ANPG, DocumentType.CERTIDAO_COMERCIAL)));
-    private static final Map<DocumentType, String> DOC_LABELS = new EnumMap<>(Map.of(
+    static final Map<DocumentType, String> DOC_LABELS = new EnumMap<>(Map.of(
             DocumentType.CERTIDAO_COMERCIAL, "Certidão Comercial",
             DocumentType.ALVARA_COMERCIAL, "Alvará Comercial",
             DocumentType.LICENCA_ANPG, "Licença da ANPG"));
@@ -95,11 +95,11 @@ public class CompanyService {
 
     // --- helpers de coerção (o cadastro chega por multipart, tudo em texto) ---
 
-    private static boolean vazio(String v) {
+    static boolean vazio(String v) {
         return v == null || v.isBlank();
     }
 
-    private static Integer inteiroOuNull(String v) {
+    static Integer inteiroOuNull(String v) {
         if (vazio(v)) return null;
         try {
             int n = Integer.parseInt(v.trim());
@@ -110,7 +110,7 @@ public class CompanyService {
         }
     }
 
-    private static BigDecimal decimalOuNull(String v, String campo) {
+    static BigDecimal decimalOuNull(String v, String campo) {
         if (vazio(v)) return null;
         try {
             BigDecimal d = new BigDecimal(v.trim());
@@ -136,7 +136,7 @@ public class CompanyService {
         }
     }
 
-    private static byte[] bytesDe(MultipartFile f) {
+    static byte[] bytesDe(MultipartFile f) {
         try {
             return f.getBytes();
         } catch (IOException e) {
@@ -144,7 +144,7 @@ public class CompanyService {
         }
     }
 
-    private static void validarDocumento(MultipartFile f) {
+    static void validarDocumento(MultipartFile f) {
         String tipo = f.getContentType();
         boolean valido = tipo != null && (tipo.matches("^image/(png|jpe?g|webp|gif)$") || tipo.equals("application/pdf"));
         if (!valido) throw new ValidationException("Documento inválido — use PDF ou imagem (PNG/JPG).");
@@ -266,6 +266,8 @@ public class CompanyService {
         else if (status != null) companies = companyRepository.findByStatusOrderByCreatedAtDesc(status);
         else if (type != null) companies = companyRepository.findByTypeOrderByCreatedAtDesc(type);
         else companies = companyRepository.findAllByOrderByCreatedAtDesc();
+        // Os rascunhos (cadastro ainda não submetido) não são da KIXIMA analisar: só aparecem se pedidos pelo estado.
+        if (status != CompanyStatus.RASCUNHO) companies = companies.stream().filter(c -> c.getStatus() != CompanyStatus.RASCUNHO).toList();
 
         // A subscrição só vem quando é pedida — quem só quer a lista não paga a contagem.
         List<CompanyDto> dtos;
@@ -312,7 +314,17 @@ public class CompanyService {
      */
     @Transactional
     public CompanyDto decideCompanyStatus(String companyId, boolean approve) {
+        return decideCompanyStatus(companyId, approve, null);
+    }
+
+    /** Idem, com o motivo da rejeição — mostrado ao utilizador para corrigir o cadastro e voltar a submetê-lo. */
+    @Transactional
+    public CompanyDto decideCompanyStatus(String companyId, boolean approve, String rejectionReason) {
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new NotFoundException("Empresa"));
+        // Um rascunho ainda não foi submetido: não há nada para a KIXIMA decidir.
+        if (company.getStatus() == CompanyStatus.RASCUNHO) {
+            throw new BusinessRuleException("O cadastro desta empresa ainda não foi submetido pelo utilizador.");
+        }
         if (approve && company.getType() == CompanyType.FORNECEDOR) {
             boolean hasSubmittedPolicy = supplierPolicyRepository.findByCompanyId(companyId).stream()
                     .anyMatch(p -> p.getStatus() != PolicyStatus.REJEITADA);
@@ -320,13 +332,15 @@ public class CompanyService {
                 throw new BusinessRuleException("Fornecedor não pode ser aprovado sem apólice Fornecedor→KIXIMA submetida.");
             }
         }
-        company.decidir(approve, Instant.now());
+        company.decidir(approve, Instant.now(), rejectionReason);
         boolean aprovada = company.getStatus() == CompanyStatus.APROVADA;
         notificationService.notifyCompanyContact(company.getId(),
                 aprovada ? NotificationType.CADASTRO_EMPRESA_APROVADO : NotificationType.CADASTRO_EMPRESA_REJEITADO,
                 aprovada ? "Cadastro aprovado" : "Cadastro rejeitado",
                 aprovada ? "O cadastro da empresa " + company.getName() + " foi aprovado. Já pode transacionar na KIXIMA."
-                        : "O cadastro da empresa " + company.getName() + " foi rejeitado.");
+                        : "O cadastro da empresa " + company.getName() + " foi rejeitado."
+                        + (CompanyService.vazio(rejectionReason) ? "" : " Motivo: " + rejectionReason.trim()
+                        + ". Corrija os dados no cadastro e volte a submetê-lo."));
         return CompanyDto.de(company);
     }
 

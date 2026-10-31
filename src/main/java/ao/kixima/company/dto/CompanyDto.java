@@ -28,6 +28,7 @@ public record CompanyDto(String id, String name, String taxId, String type, Stri
                          Instant dataAdesaoFacturacaoElectronica, Instant termsAcceptedAt, Integer employees, BigDecimal annualRevenueUsd,
                          String size, String plan, int searchRank, Instant planoValidoAte, BigDecimal seatPriceUsd, String planNotes,
                          Instant createdAt, Instant updatedAt, Instant approvedAt, Instant rejectedAt,
+                         Instant submittedAt, String rejectionReason,
                          @JsonInclude(JsonInclude.Include.NON_NULL) List<SupplierPolicyDto> supplierPolicies,
                          @JsonInclude(JsonInclude.Include.NON_NULL) List<ClientPolicyDto> clientPolicies,
                          @JsonInclude(JsonInclude.Include.NON_NULL) Optional<BudgetLimitDto> budgetLimit,
@@ -58,7 +59,7 @@ public record CompanyDto(String id, String name, String taxId, String type, Stri
                 c.getSwift(), c.getSerieFiscal(), c.getDataAdesaoFacturacaoElectronica(), c.getTermsAcceptedAt(), c.getEmployees(),
                 c.getAnnualRevenueUsd(), c.getSize() == null ? null : c.getSize().name(), c.getPlan() == null ? null : c.getPlan().name(),
                 c.getSearchRank(), c.getPlanoValidoAte(), c.getSeatPriceUsd(), c.getPlanNotes(), c.getCreatedAt(), c.getUpdatedAt(),
-                c.getApprovedAt(), c.getRejectedAt(), supplierPolicies, clientPolicies, budgetLimit, documents, subscricao);
+                c.getApprovedAt(), c.getRejectedAt(), c.getSubmittedAt(), c.getRejectionReason(), supplierPolicies, clientPolicies, budgetLimit, documents, subscricao);
     }
 
     /**
@@ -73,7 +74,7 @@ public record CompanyDto(String id, String name, String taxId, String type, Stri
         return new CompanyDto(id, name, taxId, type, status, contactEmail, contactPhone, address, verified, logoUrl,
                 city, province, country, settings, null, null, null, serieFiscal, dataAdesaoFacturacaoElectronica,
                 termsAcceptedAt, employees, annualRevenueUsd, size, plan, searchRank, planoValidoAte, seatPriceUsd,
-                planNotes, createdAt, updatedAt, approvedAt, rejectedAt, supplierPolicies, clientPolicies, budgetLimit,
+                planNotes, createdAt, updatedAt, approvedAt, rejectedAt, submittedAt, rejectionReason, supplierPolicies, clientPolicies, budgetLimit,
                 documents, subscricao);
     }
 }

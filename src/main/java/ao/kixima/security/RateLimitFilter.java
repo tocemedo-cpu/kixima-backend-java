@@ -106,7 +106,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 // Limitador PRÓPRIO: a rota devolve sempre 200 (anti-enumeração), logo todo o pedido conta.
                 new Regra("forgot-password", l.forgotPassword(), QUINZE_MIN, false, false, MENSAGEM, List.of("/api/auth/forgot-password/**")),
                 new Regra("sensitive", l.sensitive(), QUINZE_MIN, false, false, MENSAGEM,
-                        List.of("/api/companies/register/**", "/api/companies/invite/**", "/api/admin/invite/**")),
+                        List.of("/api/companies/register/**", "/api/companies/invite/**", "/api/admin/invite/**",
+                                "/api/auth/register/**", "/api/auth/verify-email/**", "/api/auth/resend-verification/**")),
                 // "Uma pessoa a escrever": 60/min por pessoa nos chats de suporte e comercial.
                 new Regra("chat", l.chat(), Duration.ofMinutes(1), true, false, MENSAGEM,
                         List.of("POST /api/conversations/*/messages", "POST /api/support/tickets/*/messages")),

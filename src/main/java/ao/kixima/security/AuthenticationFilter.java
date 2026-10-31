@@ -114,12 +114,19 @@ public class AuthenticationFilter extends OncePerRequestFilter {
                 user.getCompany() == null ? null : user.getCompany().getType(),
                 user.getCompany() == null ? null : user.getCompany().getPlan(),
                 user.getApprovalCap(), user.getName(), user.getEmail(), user.getAvatarUrl(),
-                mfa.pendente(), mfa.restrita(), mfa.prazo());
+                mfa.pendente(), mfa.restrita(), mfa.prazo(),
+                user.getCompany() == null ? null : user.getCompany().getStatus());
 
         if (mfa.restrita() && !mfaPolicyService.caminhoPermitido(path)) {
             responder403(response,
                     "A verificação em dois passos passou a ser obrigatória para o seu perfil. "
                             + "Ative-a em Segurança para voltar a usar a plataforma.");
+            return;
+        }
+
+        // Cadastro por aprovar: só a sessão e o próprio cadastro. Rotas públicas não precisam de empresa aprovada.
+        if (!publico && !CadastroGate.permite(currentUser.companyStatus(), path)) {
+            escrever(response, 403, CadastroGate.CODIGO, CadastroGate.mensagem(currentUser.companyStatus()));
             return;
         }
 

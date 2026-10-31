@@ -1,6 +1,7 @@
 package ao.kixima.security;
 
 import ao.kixima.company.CompanyPlan;
+import ao.kixima.company.CompanyStatus;
 import ao.kixima.company.CompanyType;
 
 import java.math.BigDecimal;
@@ -25,6 +26,8 @@ public record CurrentUser(
         String avatarUrl,
         boolean mfaPendente,
         boolean mfaRestrita,
-        Instant mfaPrazo
+        Instant mfaPrazo,
+        /** Estado do cadastro da empresa; {@code null} para o Admin do Sistema (sem empresa). */
+        CompanyStatus companyStatus
 ) {
 }

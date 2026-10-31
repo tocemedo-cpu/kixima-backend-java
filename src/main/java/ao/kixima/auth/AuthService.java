@@ -1,5 +1,6 @@
 package ao.kixima.auth;
 
+import ao.kixima.common.error.AppException;
 import ao.kixima.common.error.BusinessRuleException;
 import ao.kixima.common.error.ConflictException;
 import ao.kixima.common.error.ForbiddenException;
@@ -90,13 +91,20 @@ public class AuthService {
             throw new ForbiddenException("A sua conta ainda aguarda aprovação do administrador da empresa.");
         }
         Company company = user.getCompany();
-        if (company != null && company.getStatus() != CompanyStatus.APROVADA) {
+        // Empresas em RASCUNHO, PENDENTE ou REJEITADA entram — para completar, acompanhar ou corrigir o cadastro; o que
+        // podem fazer até à aprovação limita-o o AuthenticationFilter. Só a empresa suspensa continua sem acesso.
+        if (company != null && company.getStatus() == CompanyStatus.SUSPENSA) {
             throw new ForbiddenException("A empresa ainda não foi aprovada no cadastro (due diligence).");
         }
 
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             loginAttemptService.registarFalha(user);
             throw new UnauthorizedException("Credenciais inválidas.");
+        }
+        // Senha certa, mas o email da conta ainda não foi confirmado (registo novo): diz-se onde está o problema.
+        if (!user.isEmailVerified()) {
+            throw new AppException("Confirme o seu email para entrar. Enviámos-lhe um link de confirmação — "
+                    + "se não o encontra, peça um novo.", 403, "EMAIL_NOT_VERIFIED");
         }
         // Senha certa: apaga o rasto das falhas anteriores. Antes da 2FA de propósito.
         loginAttemptService.limpar(user);
@@ -126,7 +134,8 @@ public class AuthService {
         UserSessionDto dto = new UserSessionDto(
                 user.getId(), user.getName(), user.getEmail(), user.getRole(), user.getAdminAreas(),
                 user.getCompanyId(), company == null ? null : company.getName(),
-                company == null ? null : company.getType(), user.getAvatarUrl());
+                company == null ? null : company.getType(), user.getAvatarUrl(),
+                company == null ? null : company.getStatus());
         return LoginResponse.sessao(token, mfa.pendente(), mfa.restrita(), mfa.prazo(), dto);
     }
 

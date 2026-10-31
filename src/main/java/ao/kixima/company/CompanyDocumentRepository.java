@@ -10,4 +10,6 @@ public interface CompanyDocumentRepository extends JpaRepository<CompanyDocument
     long countByFileUrlStartingWith(String prefixo);
 
     long countByCompanyId(String companyId);
+
+    boolean existsByFileUrlAndCompanyId(String fileUrl, String companyId);
 }

@@ -63,6 +63,11 @@ public class JwtService {
         return sign(Map.of("t", "pwreset", "sub", userId, "tv", tokenVersion), Duration.ofHours(1));
     }
 
+    /** Token de confirmação do email de uma conta nova — válido 48 h; confirmar duas vezes é inofensivo. */
+    public String signEmailVerification(String userId) {
+        return sign(Map.of("t", "emailverify", "sub", userId), Duration.ofHours(48));
+    }
+
     /** Token de convite — espelha o INVITE_TTL (7d) de authService.js. */
     public String signInvite(String companyId, String role, String inviteId) {
         var claims = new java.util.HashMap<String, Object>();

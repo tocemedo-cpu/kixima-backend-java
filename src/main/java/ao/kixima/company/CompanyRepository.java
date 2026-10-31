@@ -7,6 +7,12 @@ import java.util.List;
 public interface CompanyRepository extends JpaRepository<Company, String> {
     boolean existsByTaxId(String taxId);
 
+    /** Quem serve ficheiros: o logótipo de uma empresa é público (a montra pública mostra-o). */
+    boolean existsByLogoUrl(String logoUrl);
+
+    /** Ficheiro ainda só referenciado no rascunho do cadastro (ex.: documento da apólice por submeter). */
+    boolean existsByIdAndOnboardingDraftContaining(String id, String fragmento);
+
     /** Espelha o `findMany({ where: { planoValidoAte: { not: null } } })` de assinaturaService.enviarAvisosDeExpiracao. */
     List<Company> findByPlanoValidoAteIsNotNull();
 
