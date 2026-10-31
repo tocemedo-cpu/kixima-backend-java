@@ -1,5 +1,8 @@
 # Produção: aplicar a migração V2 (cadastro empresarial em etapas)
 
+> **O guia de entrega completo e actual é [DEPLOY_V2_PRODUCAO.md](DEPLOY_V2_PRODUCAO.md)** (artefacto, variáveis, JAR,
+> verificações e recuo). Este ficheiro fica como resumo da migração.
+
 Passo a passo para levar o novo cadastro (`V2__cadastro_progressivo.sql`) à base de produção
 (`jdbc:postgresql://db_kixima:5432/kixima`, o valor por omissão do `application.yml`). Visão geral do fluxo em
 [cadastro-progressivo.md](cadastro-progressivo.md).
@@ -10,7 +13,7 @@ Passo a passo para levar o novo cadastro (`V2__cadastro_progressivo.sql`) à bas
 existem, para ninguém perder o acesso) com `DEFAULT CURRENT_TIMESTAMP`. Todas as instruções são idempotentes.
 
 **Porque é preciso antes do novo JAR:** o Hibernate corre com `ddl-auto: validate`. Sem as colunas novas, o JAR
-recusa arrancar com `Schema-validation: missing column [email_verified_at]`.
+recusa arrancar com `Schema-validation: missing column [...]` (por exemplo `[onboarding_draft]`).
 
 ## Ordem recomendada
 
