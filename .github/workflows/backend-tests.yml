@@ -94,3 +94,24 @@ jobs:
           path: target/surefire-reports/
           if-no-files-found: ignore
           retention-days: 14
+
+      # O JAR compilado por este mesmo `verify` (já testado), para descarregar em Actions → a execução → Artifacts.
+      # Só em push e execuções manuais com os testes verdes; os PR não geram JAR. Não leva segredos: a configuração
+      # vem do ambiente do servidor onde correr.
+      - name: SHA-256 do JAR
+        if: success() && github.event_name != 'pull_request'
+        run: |
+          cd target
+          sha256sum kixima-backend-java-*.jar | tee SHA256.txt
+
+      - name: JAR do backend
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: kixima-backend-jar-${{ github.sha }}
+          path: |
+            target/kixima-backend-java-*.jar
+            target/SHA256.txt
+          if-no-files-found: error
+          compression-level: 0 # o JAR já está comprimido
+          retention-days: 30
