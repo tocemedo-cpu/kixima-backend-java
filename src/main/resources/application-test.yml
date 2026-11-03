@@ -8,6 +8,14 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  flyway:
+    # A suite corre SEMPRE contra o schema actual: o Flyway aplica as migrações em falta (hoje, a V2 numa base que só
+    # tem a V1) antes de o Hibernate validar. Sem isto, uma kixima_test criada antes da V2 falha com
+    # "Schema-validation: missing column [onboarding_draft] in table [companies]" e só se corrigia à mão.
+    # Numa base que já tem o schema mas não tem histórico (baseline-on-migrate, baseline-version: 1 — ver application.yml)
+    # nada da V1 é repetido; a V2 é idempotente. Só acrescenta estrutura (nunca apaga dados). O utilizador da base de
+    # testes tem de ser o dono das tabelas (DDL). A validação do Hibernate continua activa (ddl-auto: validate).
+    enabled: true
 
 sentry:
   # Como no Node (`config.sentry.dsn && !config.isTest`): nos testes o Sentry nunca liga, mesmo com SENTRY_DSN no ambiente.

@@ -61,7 +61,8 @@ colunas.
 **Validado** (aplicação limpa contra uma base local descartável, diff de
 schema idêntico ao original, suite JUnit a arrancar com sucesso contra ela —
 ver o cabeçalho do próprio ficheiro) mas **`FLYWAY_ENABLED` continua `false`
-por omissão** — ligar só depois de a base de dados nova estar mesmo criada
+por omissão** (excepto nos perfis `test` e `prod`, onde vem ligado — ver "Migrações
+por perfil" abaixo) — ligar só depois de a base de dados nova estar mesmo criada
 (`FLYWAY_ENABLED=true` + `DATABASE_URL_JDBC` a apontar para ela).
 
 `docs/schema-referencia.prisma` é uma cópia estática (não vinculada, não lida
@@ -179,6 +180,23 @@ do Flyway (ex.: criada pelo Prisma), o Flyway apenas a marca como versão 1 e
 não executa nada (`baseline-version: 1`; coberto por `FlywayBaselineTest`).
 Se a base tiver só **parte** das tabelas, o Flyway não a repara — restaura-a
 de uma cópia completa ou aplica-lhe as migrações em falta.
+
+**Migrações por perfil.** O Hibernate só valida (`ddl-auto: validate`); quem evolui o
+schema é o Flyway (`src/main/resources/db/migration`: `V1__baseline.sql`,
+`V2__cadastro_progressivo.sql`, …).
+
+| Perfil | Flyway por omissão | Nota |
+|---|---|---|
+| `test` (`mvn test`) | **ligado** | A suite aplica as migrações em falta à `kixima_test` antes de validar. O utilizador da base tem de ser o dono das tabelas. |
+| `prod` | **ligado** (`FLYWAY_ENABLED=false` desliga) | Aplica as migrações ao arrancar. Faz backup antes de pôr uma versão nova (ver `docs/DEPLOY_V2_PRODUCAO.md`). |
+| `dev` / sem perfil | desligado (`FLYWAY_ENABLED=true` liga) | Quem usa uma base local antiga liga-o, ou aplica as migrações à mão. |
+
+**Erro `Schema-validation: missing column [...] in table [...]`** (por exemplo
+`[onboarding_draft]` em `companies`) = a base tem o schema mas falta uma migração
+posterior à V1 (aqui, a V2 do cadastro em etapas). Acontece com o Flyway desligado
+(`FLYWAY_ENABLED=false`, ou nos perfis `dev`/sem perfil) numa base criada antes da
+migração. Liga o Flyway, ou aplica o ficheiro em falta à mão; todas as migrações são
+idempotentes e não apagam dados. Diagnóstico em `docs/DEPLOY_V2_PRODUCAO.md`, secção 7b.
 
 ### 3. Armazenamento — MinIO auto-hospedado
 

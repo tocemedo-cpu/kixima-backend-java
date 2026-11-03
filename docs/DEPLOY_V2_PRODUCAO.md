@@ -40,6 +40,11 @@ sha256sum kixima-backend-java-0.1.0-SNAPSHOT.jar
 # tem de coincidir exactamente com o SHA-256 acima
 ```
 
+> **Versões do JAR e o Flyway.** Este JAR (commit `7c5a3d9`) tem o Flyway **desligado por omissão**, também em `prod`:
+> a V2 aplica-se à mão (3A) ou com `FLYWAY_ENABLED=true` (3B). Os JAR compilados **depois** da correcção «Flyway ligado
+> por omissão em `prod` e no perfil de testes» (ver secção 7b) aplicam as migrações sozinhos ao arrancar; neles, para
+> aplicar à mão (3A), define `FLYWAY_ENABLED=false`.
+
 Qualquer nova compilação gera um hash diferente. Se o JAR for reconstruído, o hash desta tabela deixa de valer e deve
 usar-se o do ficheiro realmente entregue.
 
@@ -137,8 +142,9 @@ Saída esperada: vários `ALTER TABLE` e `ALTER TYPE`, mais um `UPDATE <n>` (n =
 sem nenhuma linha `ERROR`. Repetir o comando é seguro (todas as instruções são idempotentes; da segunda vez o
 `UPDATE` devolve `0`).
 
-Neste caminho o Flyway fica desligado (`FLYWAY_ENABLED` por definir ou `false`) e a base **não** passa a ter a tabela
-`flyway_schema_history`.
+Neste caminho o Flyway fica desligado (`FLYWAY_ENABLED=false`) e a base **não** passa a ter a tabela
+`flyway_schema_history`. (Num JAR em que o Flyway vem ligado por omissão em `prod`, deixar `FLYWAY_ENABLED` por definir
+também é seguro depois da aplicação manual: o Flyway marca a base como V1 e repete a V2, que é idempotente.)
 
 ### 3B. Aplicação pelo Flyway (alternativa)
 
@@ -224,7 +230,7 @@ o link usa o cabeçalho `Host` do pedido, que pode ser forjado; define-a sempre.
 
 | Variável | Para quê |
 |---|---|
-| `FLYWAY_ENABLED` | `true` só se usares o caminho 3B (ou se quiseres que as migrações futuras se apliquem sozinhas). |
+| `FLYWAY_ENABLED` | No JAR `7c5a3d9`: `true` só se usares o caminho 3B. Nos JAR com a correcção da secção 7b, `prod` já vem com `true` por omissão; `false` desliga (aplicação manual). |
 | `CORS_ORIGINS` | origens web adicionais, separadas por vírgula. |
 | `MFA_ENFORCE_FROM` | data a partir da qual o 2FA é obrigatório para administradores. **Atenção:** se já tiver passado, um administrador de empresa recém-registado tem de ligar o 2FA (em *Segurança*) antes de conseguir completar o cadastro. |
 | `LOG_LEVEL`, `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS` | ajustes de operação. |
@@ -283,6 +289,47 @@ Se aparecer `Schema-validation: missing column [...]` (por exemplo `[onboarding_
 
 ---
 
+## 7b. Resolução de problemas: `Schema-validation: missing column [onboarding_draft] in table [companies]`
+
+**Significado.** O serviço ligou-se a uma base onde a V2 **não está aplicada**. O Hibernate (`ddl-auto: validate`, que
+não se desactiva) recusa arrancar. A coluna `companies.onboarding_draft` só é criada pela V2
+(`ADD COLUMN IF NOT EXISTS onboarding_draft text`) e a entidade `Company` mapeia-a; as duas estão coerentes.
+
+**Porque acontece.** As migrações só correm se o Flyway estiver ligado, e nos JAR anteriores à correcção vinha
+**desligado por omissão** em todos os perfis. O stack de produção também não o define, a menos que se acrescente
+`FLYWAY_ENABLED` ao ambiente do serviço. Nos testes não havia nada que aplicasse a V2 à `kixima_test`. Resultado: quem não
+aplicou a V2 à mão (guia, passo 3A) fica sem a coluna.
+
+**Diagnóstico, só leitura** (na base a que o serviço se liga: confirma `DATABASE_URL_JDBC`):
+
+```bash
+docker exec -i <ID> psql -U <utilizador> -d kixima -Atc "
+select current_database();
+select 'coluna onboarding_draft: '||count(*) from information_schema.columns
+  where table_schema='public' and table_name='companies' and column_name='onboarding_draft';
+select 'histórico Flyway: '||coalesce(to_regclass('public.flyway_schema_history')::text,'não existe');"
+docker exec -i <ID> psql -U <utilizador> -d kixima -Atc \
+  "select version, type, success from flyway_schema_history order by installed_rank;"   # só se a tabela existir
+```
+
+| O que vês | Causa | O que fazer |
+|---|---|---|
+| coluna `0` e sem histórico Flyway | V2 nunca aplicada, Flyway desligado | Aplicar a V2 (3A) ou arrancar com Flyway ligado (3B) |
+| coluna `0` e histórico só com `1 BASELINE` | Flyway ligado mas a V2 ainda não correu (ou o serviço não foi reiniciado com o JAR novo) | Reiniciar com o JAR que contém a V2; se persistir, aplicar a V2 (3A) |
+| coluna `0` e histórico com `2` | outra base: o Flyway correu numa base diferente da que o serviço usa, ou a base foi restaurada de um backup anterior à V2 | Confirmar o nome da base em `DATABASE_URL_JDBC`; aplicar a V2 à base certa (3A) |
+| coluna `1` e o erro persiste | o serviço usa outra base ou outro servidor | Confirmar `DATABASE_URL_JDBC` (host `db_kixima`, base `kixima`) |
+
+**Correcção no código** (a que acompanha este guia): o Flyway passa a vir **ligado por omissão** no perfil `prod` e no
+perfil `test` (`application-prod.yml`, `application-test.yml`). A validação do Hibernate mantém-se. Efeitos:
+
+- `mvn test` aplica sozinho à `kixima_test` as migrações em falta (a V2); já não é preciso `psql -f`. O utilizador da base
+  de testes tem de ser dono das tabelas.
+- Em `prod`, o serviço aplica as migrações ao arrancar. Numa base que já tem o schema e não tem histórico, o Flyway marca-a
+  como V1 e só corre a V2 (idempotente, não apaga dados). **Faz backup antes de pôr o JAR novo** (secção 2).
+- `FLYWAY_ENABLED=false` volta a desligar, para quem prefira aplicar as migrações à mão (3A).
+
+---
+
 ## 8. Plano de recuo (só da aplicação)
 
 - **Não reverter o schema.** A V2 só acrescenta e relaxa restrições. Voltar a pôr `NOT NULL` em `name`/`tax_id` falha se
@@ -322,6 +369,10 @@ servidor de produção**.
 | Testes automatizados (`mvn test`), contra uma base `kixima_test` limpa, só com os dados de exemplo | **305 testes, 0 falhas** |
 | Arranque do JAR em perfil `prod`, base com schema antigo + `FLYWAY_ENABLED=true` | pronto; histórico Flyway `1 BASELINE`, `2 SQL`; registo de conta devolve 201 |
 | Arranque do JAR em perfil `prod`, V2 aplicada à mão, Flyway desligado | pronto |
+| *Correcção 7b:* `prod`, base só com a V1, `FLYWAY_ENABLED` por definir | pronto; histórico `1 BASELINE`, `2 SQL` |
+| *Correcção 7b:* `prod`, base só com a V1, `FLYWAY_ENABLED=false` | recusa arrancar com `missing column [onboarding_draft]` (esperado) |
+| *Correcção 7b:* `prod`, V2 já aplicada à mão e sem histórico, `FLYWAY_ENABLED` por definir | pronto; histórico `1 BASELINE`, `2 SQL` |
+| *Correcção 7b:* `mvn test` contra uma base com os dados de exemplo e **sem** a V2 | **305 testes, 0 falhas**; o Flyway aplica a V2 |
 | Arranque do JAR em perfil `prod`, **sem** V2 | recusa arrancar com `Schema-validation: missing column [onboarding_draft]` (esperado) |
 | Teste E2E do percurso completo (registo → email → cadastro por etapas → submissão → aprovação), num browser real | 25 passos, sem erros |
 | Testes E2E anteriores (percursos, acessibilidade, mobile) | 70/70 |

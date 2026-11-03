@@ -8,6 +8,13 @@ spring:
     password: ${DATABASE_PASSWORD}
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:5}
+  flyway:
+    # Em produção as migrações aplicam-se ao arrancar (ligado por omissão). O Hibernate só VALIDA (ddl-auto: validate),
+    # por isso, com o Flyway desligado, uma base sem a migração mais recente recusa arrancar com
+    # "Schema-validation: missing column [...]". Base já existente sem histórico: marca-se como V1 e só correm as
+    # migrações seguintes (a V1 nunca se repete). Todas são idempotentes e não apagam dados — faz backup antes.
+    # Para aplicar as migrações à mão em vez de no arranque: FLYWAY_ENABLED=false.
+    enabled: ${FLYWAY_ENABLED:true}
 
 kixima:
   auth:
