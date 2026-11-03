@@ -1,0 +1,96 @@
+# Compila o backend Java do KIXIMA e corre a suite de testes (JUnit/Spring Boot) contra um PostgreSQL EFÉMERO.
+#
+# - O PostgreSQL é um contentor de serviço criado para esta execução e destruído no fim: base `kixima_test`,
+#   utilizador e senha descartáveis. Nunca há ligação a produção nem a qualquer outra base.
+# - Não são precisos segredos: o perfil `test` (src/main/resources/application-test.yml) traz as suas próprias chaves,
+#   que só servem para testes. Os utilizadores e os dados de negócio são criados e apagados pela própria suite
+#   (src/test/java/ao/kixima/testsupport/), que recusa qualquer base cujo nome não contenha "test".
+name: Backend tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Uma execução de cada vez por ramo/PR; uma nova cancela a anterior ainda em curso (nunca a do `main`).
+concurrency:
+  group: backend-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Compilar e testar (Java 21, PostgreSQL 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Têm de coincidir com spring.datasource.* do perfil `test` (e com o BackupServiceTest, que confere
+          # postgresql://kixima:kixima@localhost:5432/kixima_test). Credenciais descartáveis: o contentor morre com o job.
+          # O utilizador é dono da base, como o Flyway e o FlywayBaselineTest (CREATE DATABASE) exigem.
+          POSTGRES_USER: kixima
+          POSTGRES_PASSWORD: kixima
+          POSTGRES_DB: kixima_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kixima -d kixima_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Código
+        uses: actions/checkout@v4
+
+      - name: Java 21 (Temurin) com cache do Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21' # = <java.version> do pom.xml
+          cache: maven
+
+      # O BackupServiceTest corre `pg_dump` como o serviço real; a versão do cliente não pode ser inferior à do servidor (16).
+      - name: pg_dump 16 no PATH
+        run: |
+          if ! [ -x /usr/lib/postgresql/16/bin/pg_dump ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client-16
+          fi
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/16/bin/pg_dump --version
+
+      - name: Compilar e testar
+        run: mvn --batch-mode --no-transfer-progress verify
+        env:
+          # DATABASE_URL_JDBC / DIRECT_URL ficam POR DEFINIR de propósito: o perfil `test` aponta a
+          # localhost:5432/kixima_test (o serviço acima) e o FlywayBaselineTest usa DATABASE_URL_JDBC para criar
+          # bases temporárias — definida, iria para onde ela apontar.
+          TZ: UTC
+
+      - name: Resumo dos testes
+        if: always()
+        run: |
+          shopt -s nullglob
+          {
+            echo "### Testes do backend"
+            for f in target/surefire-reports/*.txt; do
+              grep -h "Tests run:" "$f" | head -1 | sed "s|^|- |"
+            done | sort | tail -n 400
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Relatórios do Surefire
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 14
