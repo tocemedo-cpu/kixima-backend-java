@@ -8,7 +8,9 @@ spring:
     # Ver README.md para a origem do schema desta base de dados.
     url: ${DATABASE_URL_JDBC:jdbc:postgresql://db_kixima:5432/kixima}
     username: ${DATABASE_USER:kixima}
-    password: ${DATABASE_PASSWORD:SelectServices_2034!!}
+    # SEM valor por omissão: este repositório é público. A senha vem sempre do ambiente (DATABASE_PASSWORD); os perfis
+    # `dev` e `test` trazem a da sua base local descartável.
+    password: ${DATABASE_PASSWORD:}
     hikari:
       # Pool pequeno por omissão — ajustar com DB_POOL_MAX conforme o plano
       # do Postgres em produção.
@@ -122,7 +124,9 @@ kixima:
       valor-usd: ${KIXIMA_PRECO_ADDON_PO_ROBOT_USD:200}
       periodo: ${KIXIMA_PRECO_ADDON_PO_ROBOT_PERIODO:MENSAL}
   auth:
-    jwt-secret: ${JWT_SECRET:JefdY6MG/89qm/eNP6iZ00f2yjiGkcQ+almZRS0U0IU=}
+    # SEM valor por omissão (repositório público): sem JWT_SECRET o arranque falha (JwtService). O perfil `dev` gera um
+    # segredo aleatório por arranque; o `test` tem o seu, só para testes; em `prod` é obrigatório e validado.
+    jwt-secret: ${JWT_SECRET:}
     jwt-expires-in: ${JWT_EXPIRES_IN:1d}
     mfa-required-roles: ${MFA_REQUIRED_ROLES:ADMIN_SISTEMA,COMPANY_ADMIN}
     mfa-enforce-from: ${MFA_ENFORCE_FROM:}

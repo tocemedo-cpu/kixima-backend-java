@@ -6,6 +6,12 @@ spring:
     username: kixima
     password: kixima
 
+kixima:
+  auth:
+    # Sem segredo escrito no repositório: em dev gera-se um aleatório (64 hex) a cada arranque, a menos que defina
+    # JWT_SECRET. Consequência: as sessões deixam de valer ao reiniciar — para as manter, exporte JWT_SECRET.
+    jwt-secret: ${JWT_SECRET:${random.value}${random.value}}
+
 logging:
   level:
     # Mesma variável que config/logger.js (error|warn|info|debug); em dev a omissão é debug.
