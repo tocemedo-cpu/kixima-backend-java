@@ -1,5 +1,7 @@
 package ao.kixima.cobranca;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -77,7 +79,7 @@ class AssinaturaControllerTest {
     }
 
     private String companyId() {
-        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
     }
 
     private void porNoPlano(String companyId, CompanyPlan plano) {
@@ -229,7 +231,7 @@ class AssinaturaControllerTest {
         mockMvc.perform(get("/api/assinatura/fila").header("Authorization", "Bearer " + adminSistema))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.porConfirmar").value(org.hamcrest.Matchers.greaterThan(0)))
-                .andExpect(jsonPath("$.emAberto[?(@.id == '" + id + "')].company.name").value("Petro Angola Operações, Lda"));
+                .andExpect(jsonPath("$.emAberto[?(@.id == '" + id + "')].company.name").value(Dados.nomeCliente()));
 
         mockMvc.perform(post("/api/assinatura/" + id + "/confirmar").header("Authorization", "Bearer " + adminSistema)
                         .contentType("application/json").content("{}"))

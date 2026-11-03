@@ -1,5 +1,7 @@
 package ao.kixima.conciliacao;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -102,11 +104,16 @@ class ConciliacaoControllerTest {
     void naDuvidaNaoSeDaPorPagaEQuandoTudoBateAFaturaFicaPaga() throws Exception {
         String financeiroToken = login(FINANCEIRO_EMAIL);
         String compradorToken = login(COMPRADOR_EMAIL);
-        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, "FAT-2026-00001"); // 2.394.000 AOA, PENDENTE
+        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, Dados.refFatura(1)); // 2.394.000 AOA, PENDENTE
         jdbcTemplate.update("UPDATE invoices SET referencia_pagamento = ? WHERE id = ?", REF, invoiceId);
 
         mockMvc.perform(get("/api/conciliacao/por-resolver").header("Authorization", "Bearer " + compradorToken))
                 .andExpect(status().isForbidden());
+
+        // Linhas que já existam na base (de outras empresas ou execuções) não contam: mede-se só o que este teste importa.
+        int jaPorResolver = objectMapper.readTree(mockMvc.perform(get("/api/conciliacao/por-resolver")
+                        .header("Authorization", "Bearer " + financeiroToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("total").asInt();
 
         // Valor a menos, valor a mais, moeda diferente: DIVERGENTE — fatura continua pendente.
         JsonNode r = importar(financeiroToken, List.of(
@@ -138,7 +145,7 @@ class ConciliacaoControllerTest {
         Map<String, Object> pagamento = jdbcTemplate.queryForMap("SELECT canal::text AS canal, reference, status::text AS status FROM payments WHERE invoice_id = ?", invoiceId);
         assertThat(pagamento.get("canal")).isEqualTo("REFERENCIA_BANCARIA");
         assertThat(pagamento.get("reference")).isEqualTo("CONC-bk-6");
-        assertThat(jdbcTemplate.queryForObject("SELECT status::text FROM purchase_orders WHERE reference = 'PO-2026-00002'", String.class)).isEqualTo("PAGA");
+        assertThat(jdbcTemplate.queryForObject("SELECT status::text FROM purchase_orders WHERE reference = '" + Dados.refPo(2) + "'", String.class)).isEqualTo("PAGA");
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'PAGAMENTO_CONCILIADO' AND entity_id = ?", Integer.class, invoiceId)).isEqualTo(1);
 
         // Importar o mesmo extrato duas vezes não paga a fatura duas vezes.
@@ -155,8 +162,8 @@ class ConciliacaoControllerTest {
         // O que sobra para uma pessoa — com a fatura quando há.
         mockMvc.perform(get("/api/conciliacao/por-resolver").header("Authorization", "Bearer " + financeiroToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.total").value(6))
-                .andExpect(jsonPath("$.itens[?(@.idNoBanco=='bk-7')].invoice.reference").value("FAT-2026-00001"));
+                .andExpect(jsonPath("$.total").value(jaPorResolver + 6))
+                .andExpect(jsonPath("$.itens[?(@.idNoBanco=='bk-7')].invoice.reference").value(Dados.refFatura(1)));
 
         // Canais: os dois de sempre, e o Multicaixa por ligar.
         mockMvc.perform(get("/api/conciliacao/canais").header("Authorization", "Bearer " + financeiroToken))
@@ -169,7 +176,7 @@ class ConciliacaoControllerTest {
     @Test
     void corrigirAReferenciaAMaoVoltaATentar() throws Exception {
         String financeiroToken = login(FINANCEIRO_EMAIL);
-        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, "FAT-2026-00001");
+        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, Dados.refFatura(1));
         jdbcTemplate.update("UPDATE invoices SET referencia_pagamento = ? WHERE id = ?", REF, invoiceId);
 
         JsonNode r = importar(financeiroToken, List.of(linha("bk-10", 2394000, "transferencia sem referencia legivel", null)));

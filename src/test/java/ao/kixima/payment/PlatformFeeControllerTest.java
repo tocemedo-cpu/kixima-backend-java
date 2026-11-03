@@ -1,5 +1,7 @@
 package ao.kixima.payment;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -88,9 +90,13 @@ class PlatformFeeControllerTest {
         String financeiroToken = login(FINANCEIRO_EMAIL);
         String fornecedorToken = login(FORNECEDOR_EMAIL);
         String adminToken = login(ADMIN_SISTEMA_EMAIL);
-        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, "FAT-2026-00001");
-        String kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
-        String petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
+        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, Dados.refFatura(1));
+        String kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
+        String petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
+
+        // Taxas que já existam na base (outras empresas ou execuções) não contam: mede-se só o que este teste gera.
+        int jaExistentes = objectMapper.readTree(mockMvc.perform(get("/api/admin/platform-fees").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("kpis").get("total").asInt();
 
         MockMultipartFile proof = new MockMultipartFile("proof", "trf.pdf", "application/pdf", "%PDF-1.4\n".getBytes(StandardCharsets.UTF_8));
         mockMvc.perform(multipart("/api/payments/invoices/" + invoiceId + "/pay").file(proof).header("Authorization", "Bearer " + financeiroToken))
@@ -105,11 +111,9 @@ class PlatformFeeControllerTest {
 
         mockMvc.perform(get("/api/admin/platform-fees").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.kpis.total").value(1))
-                .andExpect(jsonPath("$.fees.length()").value(1))
-                .andExpect(jsonPath("$.fees[0].company.name").value("Fornecedora Industrial Kianda, Lda"))
-                .andExpect(jsonPath("$.fees[0].invoice.reference").value("FAT-2026-00001"))
-                .andExpect(jsonPath("$.fees[0].status").value("PENDENTE"));
+                .andExpect(jsonPath("$.kpis.total").value(jaExistentes + 1))
+                .andExpect(jsonPath("$.fees[?(@.invoice.reference=='" + Dados.refFatura(1) + "')].company.name").value(Dados.nomeFornecedora()))
+                .andExpect(jsonPath("$.fees[?(@.invoice.reference=='" + Dados.refFatura(1) + "')].status").value("PENDENTE"));
 
         mockMvc.perform(patch("/api/admin/platform-fees/" + feeId + "/charge").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
@@ -122,13 +126,13 @@ class PlatformFeeControllerTest {
         // O fornecedor vê o seu extrato ("quanto devo à KIXIMA e porquê") — com a fórmula e os totais.
         mockMvc.perform(get("/api/companies/" + kiandaId + "/platform-fees").header("Authorization", "Bearer " + fornecedorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.company.taxId").value("AO-FOR-0001"))
+                .andExpect(jsonPath("$.company.taxId").value(Dados.nifFornecedora()))
                 .andExpect(jsonPath("$.kpis.total").value(1))
                 .andExpect(jsonPath("$.kpis.cobradas").value(1))
                 .andExpect(jsonPath("$.kpis.chargedAOA").value(23.0))
                 .andExpect(jsonPath("$.kpis.currency").value("USD"))
                 .andExpect(jsonPath("$.formula.perPo").value(8))
-                .andExpect(jsonPath("$.fees[0].invoice.reference").value("FAT-2026-00001"));
+                .andExpect(jsonPath("$.fees[0].invoice.reference").value(Dados.refFatura(1)));
 
         // ... e não o de outra empresa.
         mockMvc.perform(get("/api/companies/" + petroangolaId + "/platform-fees").header("Authorization", "Bearer " + fornecedorToken))

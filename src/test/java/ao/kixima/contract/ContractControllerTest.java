@@ -1,5 +1,7 @@
 package ao.kixima.contract;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -112,8 +114,8 @@ class ContractControllerTest {
 
     @Test
     void n2_soSePodeCriarContratoEmNomeDaPropriaEmpresaCliente() throws Exception {
-        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         prepararEmpresas(clientCompanyId);
         String outsiderToken = login(OUTSIDER_EMAIL);
         String companyAdminToken = login(COMPANY_ADMIN_EMAIL);
@@ -137,8 +139,8 @@ class ContractControllerTest {
 
     @Test
     void semPlanoProOContratoQuadroERecusado() throws Exception {
-        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         jdbcTemplate.update("UPDATE companies SET plan = 'BASE' WHERE id = ?", clientCompanyId);
         entityManager.clear();
         String companyAdminToken = login(COMPANY_ADMIN_EMAIL);
@@ -153,8 +155,8 @@ class ContractControllerTest {
 
     @Test
     void n1n3_callOffAutomaticaEConsolidacaoComPosseESemReemissao() throws Exception {
-        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         String productId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE category = 'Válvulas' AND supplier_id = ?", String.class, supplierCompanyId);
         prepararEmpresas(clientCompanyId);
         String outsiderToken = login(OUTSIDER_EMAIL);
@@ -194,7 +196,7 @@ class ContractControllerTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/contracts").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '" + contractId + "')].clientCompany.name").value("Petro Angola Operações, Lda"));
+                .andExpect(jsonPath("$[?(@.id == '" + contractId + "')].clientCompany.name").value(Dados.nomeCliente()));
         mockMvc.perform(get("/api/contracts").header("Authorization", "Bearer " + outsiderToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -260,8 +262,8 @@ class ContractControllerTest {
 
     @Test
     void pagamentoDaFaturaConsolidadaDeVariasCallOffs() throws Exception {
-        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String clientCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         String productId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE category = 'Válvulas' AND supplier_id = ?", String.class, supplierCompanyId);
         prepararEmpresas(clientCompanyId);
         String outsiderToken = login(OUTSIDER_EMAIL);

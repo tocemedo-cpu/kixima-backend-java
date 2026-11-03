@@ -80,23 +80,25 @@ mvn test          # corre a suite JUnit contra localhost:5432/kixima_test
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### Testes: utilizadores temporários (nenhum utilizador de teste está programado)
+### Testes: utilizadores e dados de negócio temporários (nada está programado nem é preciso inserir à mão)
 
-**Nenhum utilizador de teste existe no código, nas migrações, nos seeds ou na configuração.** Os testes criam os seus
-utilizadores durante a execução (`src/test/java/ao/kixima/testsupport/Contas.java`): um por papel
-(`COMPRADOR`, `COMPANY_ADMIN`, `FINANCEIRO`, `FORNECEDOR`, `ADMIN_SISTEMA`), com **email e senha aleatórios gerados nessa
-execução** (domínio reservado `contas-temporarias.invalid`), e apagam-nos no fim (gancho de saída da JVM; se uma
-execução morrer, a seguinte apaga o que sobrou). Os testes `@Transactional` fazem rollback do resto.
+**Nenhum utilizador de teste existe no código, nas migrações, nos seeds ou na configuração, e a suite não depende de
+dados inseridos à mão na base.** Tudo é criado durante a execução por `src/test/java/ao/kixima/testsupport/`:
+
+- `Contas.java`: um utilizador por papel (`COMPRADOR`, `COMPANY_ADMIN`, `FINANCEIRO`, `FORNECEDOR`, `ADMIN_SISTEMA`),
+  com **email e senha aleatórios gerados nessa execução** (domínio reservado `contas-temporarias.invalid`).
+- `Dados.java`: o cenário de negócio — duas empresas (cliente e fornecedora, com NIF e nomes únicos por execução),
+  documentos, apólices, 9 produtos/serviços, 8 ordens de compra (uma por estado do ciclo), faturas, pagamentos,
+  contratos, pedidos de suporte e os patamares de desconto (só se a tabela estiver vazia). Os testes pedem os valores por
+  `Dados.nifCliente()`, `Dados.refPo(n)`, `Dados.refFatura(n)`…, nunca por texto fixo.
+- No fim (gancho de saída da JVM; se uma execução morrer, a seguinte apaga o que sobrou) apaga-se **só o que a própria
+  execução criou**, respeitando as chaves estrangeiras. Os testes `@Transactional` fazem rollback do resto.
 
 - Só correm numa base cujo nome contenha `test` (`kixima_test`): a `Contas` recusa qualquer outra, e nunca toca na produção.
-- O `Contas` prepara o schema (Flyway, V1 + V2) antes de criar as contas, por isso uma `kixima_test` **vazia** serve.
-- Os utilizadores ligam-se às empresas dos dados de negócio de exemplo (NIF `AO-CLI-0001`, `AO-FOR-0001`), se existirem;
-  se não existirem, cria-se uma empresa temporária. Os testes que precisam de produtos, ordens, faturas, contratos…
-  continuam a precisar desses **dados de negócio** na base de testes (não de utilizadores).
-- **A base de testes não deve ter utilizadores dos dados de exemplo antigos** (os 5 do seed Node) activos nas mesmas
-  empresas: somados aos temporários, ultrapassam os lugares do plano (CORE = 5) e 4 testes sensíveis ao número de
-  utilizadores falham (`AssinaturaControllerTest`, `InviteControllerTest`, `ContractControllerTest`,
-  `MfaReminderServiceTest`).
+- O `Contas` aplica o schema (Flyway, V1 + V2) antes de criar os dados, por isso uma `kixima_test` **vazia** serve; uma
+  que já tenha dados de exemplo também (esses dados não são lidos nem alterados).
+- Se a base de testes tiver utilizadores antigos activos nas empresas dos dados de exemplo, não interferem: os testes
+  usam as suas próprias empresas.
 - `SemUtilizadoresProgramadosTest` falha se voltar a aparecer uma conta/senha fixa ou um `INSERT INTO users` em código,
   migrações, configuração ou docs.
 

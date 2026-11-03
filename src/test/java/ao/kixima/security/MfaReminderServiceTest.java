@@ -85,9 +85,11 @@ class MfaReminderServiceTest {
 
         // Repetir a todos: o Company Admin é ignorado (24h), o Admin do Sistema ainda não tinha sido lembrado.
         EnviarLembretesResultDto r2 = mfaReminderService.enviarLembretes(null, pedidoPor);
-        assertThat(r2.enviados()).extracting(EnviarLembretesResultDto.Enviado::email).containsExactly(ADMIN_SISTEMA_EMAIL);
-        assertThat(r2.ignorados()).extracting(EnviarLembretesResultDto.Ignorado::email).containsExactly(COMPANY_ADMIN_EMAIL);
-        assertThat(r2.ignorados().get(0).motivo()).isEqualTo("Já foi lembrado nas últimas 24 horas.");
+        // «A todos» inclui os utilizadores que já existam na base: só se olha para os temporários desta execução.
+        assertThat(r2.enviados()).extracting(EnviarLembretesResultDto.Enviado::email).filteredOn(e -> e.endsWith("@" + Contas.DOMINIO)).containsExactly(ADMIN_SISTEMA_EMAIL);
+        var ignoradosTemporarios = r2.ignorados().stream().filter(i -> i.email().endsWith("@" + Contas.DOMINIO)).toList();
+        assertThat(ignoradosTemporarios).extracting(EnviarLembretesResultDto.Ignorado::email).containsExactly(COMPANY_ADMIN_EMAIL);
+        assertThat(ignoradosTemporarios.get(0).motivo()).isEqualTo("Já foi lembrado nas últimas 24 horas.");
     }
 
     @Test

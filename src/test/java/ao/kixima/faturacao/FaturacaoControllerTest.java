@@ -1,5 +1,7 @@
 package ao.kixima.faturacao;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -92,7 +94,7 @@ class FaturacaoControllerTest {
     }
 
     private String criarPO(String supplierCompanyId) {
-        String compradorId = companyId("AO-CLI-0001");
+        String compradorId = companyId(Dados.nifCliente());
         String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, COMPRADOR_EMAIL);
         String id = UUID.randomUUID().toString();
         jdbcTemplate.update("INSERT INTO purchase_orders (id, reference, buyer_company_id, supplier_company_id, created_by_id, total_amount, status, created_at, updated_at) "
@@ -117,7 +119,7 @@ class FaturacaoControllerTest {
     }
 
     private String emitirDoFornecedor(long total) {
-        return (String) emitir(total, criarPO(companyId("AO-FOR-0001"))).get("id");
+        return (String) emitir(total, criarPO(companyId(Dados.nifFornecedora()))).get("id");
     }
 
     private void linha(String invoiceId, String code, String desc, int qty, long unit, long net, long iva, String taxCode) {
@@ -203,8 +205,8 @@ class FaturacaoControllerTest {
 
     @Test
     void saftDeUmaEmpresaFornecedora() throws Exception {
-        String fornecedorId = companyId("AO-FOR-0001");
-        String compradorId = companyId("AO-CLI-0001");
+        String fornecedorId = companyId(Dados.nifFornecedora());
+        String compradorId = companyId(Dados.nifCliente());
 
         // Exige um período, recusa datas invertidas e exige a empresa.
         assertThatThrownBy(() -> saftService.gerar("ontem", "hoje", fornecedorId)).hasMessageContaining("AAAA-MM-DD");
@@ -222,7 +224,7 @@ class FaturacaoControllerTest {
             assertThat(contar(xml, "<" + tag + ">")).isEqualTo(contar(xml, "</" + tag + ">"));
         }
         assertThat((Integer) r.resumo().get("documentos")).isGreaterThanOrEqualTo(2);
-        assertThat(xml).contains("<CompanyID>AO-FOR-0001</CompanyID>");
+        assertThat(xml).contains("<CompanyID>" + Dados.nifFornecedora() + "</CompanyID>");
         @SuppressWarnings("unchecked") Map<String, Object> fornecedor = (Map<String, Object>) r.resumo().get("fornecedor");
         assertThat(fornecedor.get("id")).isEqualTo(fornecedorId);
         @SuppressWarnings("unchecked") List<String> porConfigurar = (List<String>) r.resumo().get("porConfigurar");

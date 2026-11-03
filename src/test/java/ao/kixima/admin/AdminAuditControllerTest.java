@@ -1,5 +1,7 @@
 package ao.kixima.admin;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -40,7 +42,7 @@ class AdminAuditControllerTest {
     private static final String PASSWORD = Contas.senha();
     private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
     private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
-    private static final String SUPPLIER_TAX_ID = "AO-FOR-0001";
+    private static final String SUPPLIER_TAX_ID = Dados.nifFornecedora();
     private static final String PRODUCT_NAME = "Mangueira hidráulica de alta pressão 2\"";
 
     @Autowired

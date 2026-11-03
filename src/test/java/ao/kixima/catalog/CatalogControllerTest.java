@@ -1,5 +1,7 @@
 package ao.kixima.catalog;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -121,13 +123,13 @@ class CatalogControllerTest {
                 .andExpect(jsonPath("$.productDocs").isArray())
                 .andExpect(jsonPath("$.companyDocs").isArray())
                 .andExpect(jsonPath("$.companyDocs.length()").value(2))
-                .andExpect(jsonPath("$.companyDocs[?(@.type=='CERTIDAO_COMERCIAL')].originalName").value("certidao-kianda.pdf"))
+                .andExpect(jsonPath("$.companyDocs[?(@.type=='CERTIDAO_COMERCIAL')].originalName").value(Dados.NOME_CERTIDAO_FORNECEDORA))
                 .andExpect(jsonPath("$.companyDocs[?(@.type=='LICENCA_ANPG')]").exists());
     }
 
     @Test
     void stockEMovimentosDeInventarioSoParaFornecedorOuCompanyAdminComAvisoNaTransicao() throws Exception {
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
         String productId = jdbcTemplate.queryForObject(
                 "SELECT id FROM products WHERE supplier_id = ? AND name = ?", String.class,
                 supplierCompanyId, "Mangueira hidráulica de alta pressão 2\"");

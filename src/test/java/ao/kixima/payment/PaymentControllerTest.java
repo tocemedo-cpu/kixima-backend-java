@@ -1,5 +1,7 @@
 package ao.kixima.payment;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -76,13 +78,13 @@ class PaymentControllerTest {
         String financeiroToken = login(FINANCEIRO_EMAIL);
         String compradorToken = login(COMPRADOR_EMAIL);
         String fornecedorToken = login(FORNECEDOR_EMAIL);
-        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, "FAT-2026-00001");
-        String kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
+        String invoiceId = jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, Dados.refFatura(1));
+        String kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
 
         // A fatura pendente aparece na fila do Financeiro, com a PO por baixo.
         mockMvc.perform(get("/api/payments/invoices/pending").header("Authorization", "Bearer " + financeiroToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.reference=='FAT-2026-00001')].purchaseOrder.reference").value("PO-2026-00002"));
+                .andExpect(jsonPath("$[?(@.reference=='" + Dados.refFatura(1) + "')].purchaseOrder.reference").value(Dados.refPo(2)));
 
         // O Comprador não paga — é o Financeiro que executa.
         mockMvc.perform(post("/api/payments/invoices/" + invoiceId + "/pay").header("Authorization", "Bearer " + compradorToken))
@@ -133,8 +135,8 @@ class PaymentControllerTest {
         entityManager.clear();
 
         assertThat(jdbcTemplate.queryForObject("SELECT status::text FROM invoices WHERE id = ?", String.class, invoiceId)).isEqualTo("PAGA");
-        assertThat(jdbcTemplate.queryForObject("SELECT status::text FROM purchase_orders WHERE reference = 'PO-2026-00002'", String.class)).isEqualTo("PAGA");
-        assertThat(jdbcTemplate.queryForObject("SELECT paid_at IS NOT NULL FROM purchase_orders WHERE reference = 'PO-2026-00002'", Boolean.class)).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT status::text FROM purchase_orders WHERE reference = '" + Dados.refPo(2) + "'", String.class)).isEqualTo("PAGA");
+        assertThat(jdbcTemplate.queryForObject("SELECT paid_at IS NOT NULL FROM purchase_orders WHERE reference = '" + Dados.refPo(2) + "'", Boolean.class)).isTrue();
 
         // Taxa KIXIMA: 2.394.000 AOA / 900 ≈ 2.660 USD, abaixo do limiar → 1 × 8 + 15 = 23 USD, pendente, do fornecedor.
         Map<String, Object> fee = jdbcTemplate.queryForMap("SELECT company_id, status::text AS status, amount, currency, basis, po_count FROM platform_fees WHERE invoice_id = ?", invoiceId);
@@ -153,7 +155,7 @@ class PaymentControllerTest {
         // Histórico do comprador traz o pagamento com a fatura por baixo.
         mockMvc.perform(get("/api/payments/history").header("Authorization", "Bearer " + financeiroToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id=='" + paymentId + "')].invoice.reference").value("FAT-2026-00001"));
+                .andExpect(jsonPath("$[?(@.id=='" + paymentId + "')].invoice.reference").value(Dados.refFatura(1)));
 
         // Quem não é o fornecedor da fatura NÃO confirma a receção.
         mockMvc.perform(patch("/api/payments/" + paymentId + "/confirm-received").header("Authorization", "Bearer " + financeiroToken))

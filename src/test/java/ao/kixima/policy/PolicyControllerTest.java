@@ -1,5 +1,7 @@
 package ao.kixima.policy;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -111,9 +113,9 @@ class PolicyControllerTest {
         String fornecedorToken = login(FORNECEDOR_EMAIL);
 
         String petroangolaId = jdbcTemplate.queryForObject(
-                "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
+                "SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
         String kiandaId = jdbcTemplate.queryForObject(
-                "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
+                "SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
 
         Map<String, Object> body = Map.of(
                 "policyNumber", "CLI-001",

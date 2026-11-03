@@ -1,5 +1,7 @@
 package ao.kixima.company;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -198,13 +200,13 @@ class CompanyControllerTest {
 
     @Test
     void aFichaDaEmpresaEDoCompanyAdminEDoAdminDoSistema() throws Exception {
-        String companyId = companyIdOf("AO-CLI-0001");
-        String outraEmpresaId = companyIdOf("AO-FOR-0001");
+        String companyId = companyIdOf(Dados.nifCliente());
+        String outraEmpresaId = companyIdOf(Dados.nifFornecedora());
         String companyAdmin = login(COMPANY_ADMIN_EMAIL);
 
         mockMvc.perform(get("/api/companies/" + companyId).header("Authorization", "Bearer " + companyAdmin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.taxId").value("AO-CLI-0001"))
+                .andExpect(jsonPath("$.taxId").value(Dados.nifCliente()))
                 .andExpect(jsonPath("$.clientPolicies").isArray())
                 .andExpect(jsonPath("$.supplierPolicies").isArray());
         // Mesma empresa, papéis diferentes: restrição por PERFIL.
@@ -233,7 +235,7 @@ class CompanyControllerTest {
 
     @Test
     void gestaoDoPlanoESubscricao() throws Exception {
-        String companyId = companyIdOf("AO-FOR-0001");
+        String companyId = companyIdOf(Dados.nifFornecedora());
         String adminToken = login(ADMIN_SISTEMA_EMAIL);
         String fornecedorToken = login(FORNECEDOR_EMAIL);
 
@@ -279,13 +281,13 @@ class CompanyControllerTest {
                 // `company.seatPriceUsd` é coluna Decimal → texto (como no Node); `monthly.amountUsd` é aritmética → número.
                 .isEqualByComparingTo(new java.math.BigDecimal(json.get("company").get("seatPriceUsd").asText()).multiply(java.math.BigDecimal.valueOf(json.get("activeUsers").asInt())));
         // ... e não a de outra empresa.
-        mockMvc.perform(get("/api/companies/" + companyIdOf("AO-CLI-0001") + "/subscription").header("Authorization", "Bearer " + fornecedorToken))
+        mockMvc.perform(get("/api/companies/" + companyIdOf(Dados.nifCliente()) + "/subscription").header("Authorization", "Bearer " + fornecedorToken))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void serieFiscalDataDeAdesaoEDadosBancarios() throws Exception {
-        String companyId = companyIdOf("AO-FOR-0001");
+        String companyId = companyIdOf(Dados.nifFornecedora());
         String adminToken = login(ADMIN_SISTEMA_EMAIL);
         String fornecedorToken = login(FORNECEDOR_EMAIL);
 
@@ -336,7 +338,7 @@ class CompanyControllerTest {
         entityManager.flush();
         String detail = jdbcTemplate.queryForObject("SELECT detail::text FROM audit_logs WHERE action = 'DADOS_BANCARIOS_ALTERADOS' AND entity_id = ?", String.class, companyId);
         assertThat(detail).contains("••••0123").doesNotContain("AO06004000001234567890123");
-        mockMvc.perform(get("/api/companies/" + companyIdOf("AO-CLI-0001") + "/bank-details").header("Authorization", "Bearer " + fornecedorToken))
+        mockMvc.perform(get("/api/companies/" + companyIdOf(Dados.nifCliente()) + "/bank-details").header("Authorization", "Bearer " + fornecedorToken))
                 .andExpect(status().isForbidden());
     }
 
@@ -348,7 +350,7 @@ class CompanyControllerTest {
      */
     @Test
     void listaDeEmpresasSoMostraDadosBancariosAQuemTemAreaFinanceiro() throws Exception {
-        String companyId = companyIdOf("AO-FOR-0001");
+        String companyId = companyIdOf(Dados.nifFornecedora());
         String fornecedorToken = login(FORNECEDOR_EMAIL);
         mockMvc.perform(put("/api/companies/" + companyId + "/bank-details")
                         .header("Authorization", "Bearer " + fornecedorToken)
@@ -396,7 +398,7 @@ class CompanyControllerTest {
     @Test
     void criacaoDiretaDeUtilizador() throws Exception {
         String companyAdmin = login(COMPANY_ADMIN_EMAIL);
-        String kiandaId = companyIdOf("AO-FOR-0001");
+        String kiandaId = companyIdOf(Dados.nifFornecedora());
 
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + companyAdmin)
@@ -409,7 +411,7 @@ class CompanyControllerTest {
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
         entityManager.flush();
         assertThat(jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = '" + NOVO_COMPRADOR_EMAIL + "'", String.class))
-                .isEqualTo(companyIdOf("AO-CLI-0001"));
+                .isEqualTo(companyIdOf(Dados.nifCliente()));
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'UTILIZADOR_CRIADO' AND entity_ref = '" + NOVO_COMPRADOR_EMAIL + "'", Integer.class)).isEqualTo(1);
 
         // Senha fraca (422), email repetido (409), ADMIN_SISTEMA nunca por aqui (422).

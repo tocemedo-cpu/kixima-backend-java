@@ -1,5 +1,7 @@
 package ao.kixima.integration;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -98,7 +100,7 @@ class IntegrationCallbackControllerTest {
 
     /** PRO + SAP real configurado na compradora do seed. */
     private String configurarErpReal(String adminToken) throws Exception {
-        String compradoraId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        String compradoraId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
         jdbcTemplate.update("UPDATE companies SET plan = 'PRO', search_rank = 2 WHERE id = ?", compradoraId);
         entityManager.clear();
         mockMvc.perform(put("/api/companies/" + compradoraId + "/erp-config")
@@ -112,7 +114,7 @@ class IntegrationCallbackControllerTest {
     }
 
     private String criarPo(String compradorToken, boolean esperaErpManaged) throws Exception {
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         String productId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE category = 'Hidráulica' AND supplier_id = ?", String.class, supplierCompanyId);
         var created = mockMvc.perform(post("/api/purchase-orders")
                         .header("Authorization", "Bearer " + compradorToken)

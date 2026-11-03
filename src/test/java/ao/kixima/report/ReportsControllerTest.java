@@ -1,5 +1,7 @@
 package ao.kixima.report;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -92,7 +94,7 @@ class ReportsControllerTest {
 
     @Test
     void estatisticasDoFornecedorComJanelaDeclarada() throws Exception {
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         jdbcTemplate.update("UPDATE companies SET plan = 'BASE' WHERE id = ?", supplierCompanyId);
         entityManager.clear();
         String fornecedorToken = login(FORNECEDOR_EMAIL);
@@ -116,7 +118,7 @@ class ReportsControllerTest {
 
     @Test
     void relatorioDeConteudoLocalDefensavel() throws Exception {
-        String compradoraId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        String compradoraId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
         // Precondição garantida: nenhum produto com país de origem declarado.
         jdbcTemplate.update("UPDATE products SET country_of_origin = NULL");
         entityManager.clear();

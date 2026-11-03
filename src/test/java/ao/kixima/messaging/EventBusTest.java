@@ -1,5 +1,7 @@
 package ao.kixima.messaging;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.invoice.Invoice;
 import ao.kixima.invoice.InvoiceRepository;
 import ao.kixima.po.PurchaseOrder;
@@ -70,17 +72,17 @@ class EventBusTest {
 
     @Test
     void payloadsCanonicosDaIntegracao() {
-        String poId = jdbcTemplate.queryForObject("SELECT id FROM purchase_orders WHERE reference = ?", String.class, "PO-2026-00003");
+        String poId = jdbcTemplate.queryForObject("SELECT id FROM purchase_orders WHERE reference = ?", String.class, Dados.refPo(3));
         PurchaseOrder po = purchaseOrderRepository.findById(poId).orElseThrow();
         Invoice invoice = invoiceRepository.findById(
-                jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, "FAT-2026-00002")).orElseThrow();
+                jdbcTemplate.queryForObject("SELECT id FROM invoices WHERE reference = ?", String.class, Dados.refFatura(2))).orElseThrow();
 
         Instant agora = Instant.now();
         Map<String, Object> aprovada = EventPayloads.purchaseOrderApproved(po, agora);
         assertThat(aprovada).containsKeys("poId", "reference", "buyer", "supplier", "currency", "totalAmount", "lines", "approvedAt");
-        assertThat(aprovada.get("reference")).isEqualTo("PO-2026-00003");
-        assertThat(((Map<?, ?>) aprovada.get("buyer")).get("taxId")).isEqualTo("AO-CLI-0001");
-        assertThat(((Map<?, ?>) aprovada.get("supplier")).get("taxId")).isEqualTo("AO-FOR-0001");
+        assertThat(aprovada.get("reference")).isEqualTo(Dados.refPo(3));
+        assertThat(((Map<?, ?>) aprovada.get("buyer")).get("taxId")).isEqualTo(Dados.nifCliente());
+        assertThat(((Map<?, ?>) aprovada.get("supplier")).get("taxId")).isEqualTo(Dados.nifFornecedora());
         // Nos eventos os valores são números (Number(d) no eventBus.js), não o texto Decimal das respostas HTTP.
         assertThat(((Number) aprovada.get("totalAmount")).doubleValue()).isPositive();
         List<?> lines = (List<?>) aprovada.get("lines");
@@ -91,9 +93,9 @@ class EventBusTest {
         assertThat(aprovada.get("approvedAt")).isEqualTo(agora.toString());
 
         Map<String, Object> fatura = EventPayloads.invoiceIssued(invoice, po);
-        assertThat(fatura.get("reference")).isEqualTo("FAT-2026-00002");
-        assertThat(fatura.get("poReference")).isEqualTo("PO-2026-00003");
-        assertThat(((Map<?, ?>) fatura.get("supplier")).get("taxId")).isEqualTo("AO-FOR-0001");
+        assertThat(fatura.get("reference")).isEqualTo(Dados.refFatura(2));
+        assertThat(fatura.get("poReference")).isEqualTo(Dados.refPo(3));
+        assertThat(((Map<?, ?>) fatura.get("supplier")).get("taxId")).isEqualTo(Dados.nifFornecedora());
         assertThat(fatura).containsKeys("invoiceId", "currency", "amount", "issuedAt", "dueAt");
 
         Map<String, Object> rececao = EventPayloads.goodsReceived(po, agora);

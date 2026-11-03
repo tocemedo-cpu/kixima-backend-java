@@ -1,5 +1,7 @@
 package ao.kixima.porobo;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -69,8 +71,8 @@ class PoRoboControllerTest {
     void regrasSoDoCompanyAdminESoComOAddonAtivo() throws Exception {
         String adminToken = login(COMPANY_ADMIN_EMAIL);
         String fornecedorToken = login(FORNECEDOR_EMAIL);
-        String petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
-        String valvulaId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE name LIKE 'Válvula de esfera%' AND active", String.class);
+        String petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
+        String valvulaId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE name LIKE 'Válvula de esfera%' AND active AND supplier_id = ?", String.class, Dados.idFornecedora());
 
         mockMvc.perform(get("/api/po-robot/regras").header("Authorization", "Bearer " + fornecedorToken))
                 .andExpect(status().isForbidden());

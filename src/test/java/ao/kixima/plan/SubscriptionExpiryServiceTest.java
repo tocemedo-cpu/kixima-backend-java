@@ -1,5 +1,7 @@
 package ao.kixima.plan;
 
+import ao.kixima.testsupport.Dados;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
@@ -38,9 +40,9 @@ class SubscriptionExpiryServiceTest {
     @Test
     void avisaPorPatamarSoQuandoSobeENuncaAsRestritas() throws Exception {
         String petroangolaId = jdbcTemplate.queryForObject(
-                "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
+                "SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
         String kiandaId = jdbcTemplate.queryForObject(
-                "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
+                "SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
 
         Instant agora = Instant.now();
 

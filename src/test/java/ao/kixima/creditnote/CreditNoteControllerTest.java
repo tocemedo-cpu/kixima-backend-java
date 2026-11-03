@@ -1,5 +1,7 @@
 package ao.kixima.creditnote;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -84,7 +86,7 @@ class CreditNoteControllerTest {
         String compradorToken = login(COMPRADOR_EMAIL);
         String companyAdminToken = login(COMPANY_ADMIN_EMAIL);
         String adminToken = login(ADMIN_SISTEMA_EMAIL);
-        String id = invoiceId("FAT-2026-00002"); // 684.000 AOA
+        String id = invoiceId(Dados.refFatura(2)); // 684.000 AOA
         String url = "/api/payments/invoices/" + id + "/notas-credito";
 
         // Exige motivo e um valor positivo.
@@ -150,7 +152,7 @@ class CreditNoteControllerTest {
     void anularCriaUmaNcPeloValorTotalComASubmissaoAgtVisivel() throws Exception {
         String fornecedorToken = login(FORNECEDOR_EMAIL);
         String companyAdminToken = login(COMPANY_ADMIN_EMAIL);
-        String id = invoiceId("FAT-2026-00003"); // 5.643.000 AOA
+        String id = invoiceId(Dados.refFatura(3)); // 5.643.000 AOA
         String url = "/api/payments/invoices/" + id + "/anular";
 
         // Só o fornecedor DESTA fatura (ou o Admin do Sistema) pode anulá-la.
@@ -163,7 +165,7 @@ class CreditNoteControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.creditNote.reference").value(startsWith("NC-")))
                 .andExpect(jsonPath("$.creditNote.amount").value(5643000.0))
-                .andExpect(jsonPath("$.creditNote.motivo").value("Anulação da fatura FAT-2026-00003"))
+                .andExpect(jsonPath("$.creditNote.motivo").value("Anulação da fatura " + Dados.refFatura(3)))
                 .andExpect(jsonPath("$.agtSubmission.sucesso").value(false))
                 .andExpect(jsonPath("$.agtSubmission.erro.message").isString())
                 .andExpect(jsonPath("$.creditNote.agtErro.message").isString())

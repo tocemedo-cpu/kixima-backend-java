@@ -1,5 +1,7 @@
 package ao.kixima.porobo;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.audit.Actor;
 import ao.kixima.common.error.BusinessRuleException;
 import ao.kixima.po.PoStatus;
@@ -72,9 +74,9 @@ class PoRoboServiceTest {
 
     @BeforeEach
     void fixtures() {
-        petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
-        kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
-        valvulaId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE name LIKE 'Válvula de esfera%' AND active", String.class);
+        petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
+        kiandaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
+        valvulaId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE name LIKE 'Válvula de esfera%' AND active AND supplier_id = ?", String.class, Dados.idFornecedora());
     }
 
     private void ativarAddon(String companyId) {

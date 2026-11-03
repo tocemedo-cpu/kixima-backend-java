@@ -1,5 +1,7 @@
 package ao.kixima.po;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -49,8 +51,8 @@ class PoConcurrencyTest {
     private String poId;
 
     private String criarPoAguardandoAprovacao() {
-        String compradorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
-        String fornecedorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
+        String compradorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
+        String fornecedorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifFornecedora());
         String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.COMPRADOR));
         String id = UUID.randomUUID().toString();
         jdbcTemplate.update("INSERT INTO purchase_orders (id, reference, buyer_company_id, supplier_company_id, created_by_id, total_amount, status, created_at, updated_at) "

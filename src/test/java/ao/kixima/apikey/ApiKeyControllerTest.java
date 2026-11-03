@@ -1,5 +1,7 @@
 package ao.kixima.apikey;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -42,7 +44,7 @@ class ApiKeyControllerTest {
     private static final String PASSWORD = Contas.senha();
     private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
     private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
-    private static final String SUPPLIER_TAX_ID = "AO-FOR-0001";
+    private static final String SUPPLIER_TAX_ID = Dados.nifFornecedora();
 
     @Autowired
     private MockMvc mockMvc;

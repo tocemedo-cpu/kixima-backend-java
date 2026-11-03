@@ -1,5 +1,7 @@
 package ao.kixima.po;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -66,7 +68,7 @@ class PoControllerTest {
     private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
     private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
     private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
-    private static final String SUPPLIER_TAX_ID = "AO-FOR-0001";
+    private static final String SUPPLIER_TAX_ID = Dados.nifFornecedora();
     private static final String PRODUCT_NAME = "Mangueira hidráulica de alta pressão 2\"";
 
     @Autowired
@@ -274,7 +276,7 @@ class PoControllerTest {
 
     @Test
     void naoPodeComprarDaPropriaEmpresa() throws Exception {
-        String buyerCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        String buyerCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
         String anyProductId = jdbcTemplate.queryForObject("SELECT id FROM products LIMIT 1", String.class);
         String compradorToken = login(COMPRADOR_EMAIL);
 

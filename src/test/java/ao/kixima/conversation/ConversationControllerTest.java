@@ -1,5 +1,7 @@
 package ao.kixima.conversation;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -48,7 +50,7 @@ class ConversationControllerTest {
     private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
     private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
     private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
-    private static final String SUPPLIER_TAX_ID = "AO-FOR-0001";
+    private static final String SUPPLIER_TAX_ID = Dados.nifFornecedora();
     private static final String PRODUCT_NAME = "Mangueira hidráulica de alta pressão 2\"";
 
     @Autowired
@@ -109,7 +111,7 @@ class ConversationControllerTest {
                 .andReturn();
         JsonNode listaComprador = objectMapper.readTree(listaCompradorRes.getResponse().getContentAsString());
         assertEquals(1, listaComprador.size());
-        assertEquals("Fornecedora Industrial Kianda, Lda", listaComprador.get(0).get("counterpart").get("name").asText());
+        assertEquals(Dados.nomeFornecedora(), listaComprador.get(0).get("counterpart").get("name").asText());
 
         // Mesmo o Admin do Sistema, por omissão, NÃO é participante — 404 (a exceção é a via de alerta, mais abaixo).
         mockMvc.perform(get("/api/conversations/" + conversationId).header("Authorization", "Bearer " + adminToken))
@@ -173,7 +175,7 @@ class ConversationControllerTest {
         assertTrue(alertaDaConversa != null, "Devia ter sido criado um alerta MEDIUM+ para esta conversa.");
         assertEquals("ABERTO", alertaDaConversa.get("status").asText());
         assertTrue(java.util.List.of("MEDIUM", "HIGH", "CRITICAL").contains(alertaDaConversa.get("level").asText()));
-        assertEquals("Fornecedora Industrial Kianda, Lda", alertaDaConversa.get("conversation").get("supplierCompany").asText());
+        assertEquals(Dados.nomeFornecedora(), alertaDaConversa.get("conversation").get("supplierCompany").asText());
         String alertId = alertaDaConversa.get("id").asText();
 
         // 6. Agora sim, o Admin acede à conversa sinalizada — com as 2 mensagens.

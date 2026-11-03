@@ -1,5 +1,7 @@
 package ao.kixima.apicatalogo;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -60,7 +62,7 @@ class ApiCatalogoControllerTest {
     }
 
     private String fornecedoraId() {
-        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
     }
 
     private void porNoPlano(String plano, int rank) {

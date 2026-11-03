@@ -1,5 +1,7 @@
 package ao.kixima.cobranca;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -68,7 +70,7 @@ class AddonControllerTest {
     }
 
     private String companyId() {
-        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        return jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifCliente() + "'", String.class);
     }
 
     private void porNoPlano(String plano, int rank) {

@@ -1,5 +1,7 @@
 package ao.kixima.agt;
 
+import ao.kixima.testsupport.Dados;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -104,7 +106,7 @@ class AgtSigningServiceTest {
     void assinarDocumentoUsaExactamenteOsOitoCamposDaSpecNestaOrdem() throws Exception {
         Map<String, Object> totals = AgtSigningService.documentTotals(
                 new BigDecimal("33600.00"), new BigDecimal("240000.00"), new BigDecimal("273600.00"));
-        String jws = service.assinarDocumento("FT AGTPAY-FT-TESTE/1", "AO-FOR-0001", "FT", "2026-09-24",
+        String jws = service.assinarDocumento("FT AGTPAY-FT-TESTE/1", Dados.nifFornecedora(), "FT", "2026-09-24",
                 "999999999", "AO", "Petro Angola Operações, Lda", totals);
 
         JsonNode[] header = new JsonNode[1];

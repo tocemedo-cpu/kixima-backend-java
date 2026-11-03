@@ -1,5 +1,7 @@
 package ao.kixima.painel;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -123,7 +125,7 @@ class PaineisControllerTest {
 
         JsonNode canceladas = getJson("/api/buyer/orders?status=CANCELADAS", compradorToken);
         assertThat(canceladas.get("items")).allSatisfy(p -> assertThat(List.of("REJEITADA", "RECUSADA_FORNECEDOR")).contains(p.get("status").asText()));
-        JsonNode pesquisa = getJson("/api/buyer/orders?q=kianda&limit=2", compradorToken);
+        JsonNode pesquisa = getJson("/api/buyer/orders?q=" + Dados.nomeFornecedora().replaceAll(".* ", "").toLowerCase() + "&limit=2", compradorToken);
         assertThat(pesquisa.get("items").size()).isBetween(1, 2);
 
         JsonNode payments = getJson("/api/buyer/payments", compradorToken);

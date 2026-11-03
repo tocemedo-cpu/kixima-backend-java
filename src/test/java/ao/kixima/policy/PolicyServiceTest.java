@@ -1,5 +1,7 @@
 package ao.kixima.policy;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -41,7 +43,7 @@ class PolicyServiceTest {
     @Test
     void avisoDeExpiracaoSoAsQueEstaoDentroDaJanelaENuncaReenvia() throws Exception {
         String petroangolaId = jdbcTemplate.queryForObject(
-                "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
+                "SELECT id FROM companies WHERE tax_id = ?", String.class, Dados.nifCliente());
         String adminId = jdbcTemplate.queryForObject(
                 "SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.ADMIN_SISTEMA));
 

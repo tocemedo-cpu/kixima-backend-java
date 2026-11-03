@@ -1,5 +1,7 @@
 package ao.kixima.po;
 
+import ao.kixima.testsupport.Dados;
+
 import ao.kixima.testsupport.Contas;
 import ao.kixima.testsupport.Contas.Persona;
 
@@ -66,7 +68,7 @@ class PoHistoryControllerTest {
     }
 
     private String novaPoAprovada(String compradorToken, String companyAdminToken) throws Exception {
-        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
+        String supplierCompanyId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = '" + Dados.nifFornecedora() + "'", String.class);
         String productId = jdbcTemplate.queryForObject("SELECT id FROM products WHERE category = 'Hidráulica' AND supplier_id = ?", String.class, supplierCompanyId);
         var created = mockMvc.perform(post("/api/purchase-orders")
                         .header("Authorization", "Bearer " + compradorToken)
