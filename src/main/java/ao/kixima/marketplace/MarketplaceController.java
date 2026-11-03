@@ -57,6 +57,8 @@ public class MarketplaceController {
         String v = q.get(campo);
         if (v == null) return null;
         if (v.length() > max) erros.computeIfAbsent(campo, k -> new ArrayList<>()).add("String must contain at most " + max + " character(s)");
+        // O PostgreSQL não aceita o carácter NUL em texto: chegava à base e voltava como 409 «Já existe um registo» (DataIntegrityViolation).
+        if (v.indexOf('\u0000') >= 0) erros.computeIfAbsent(campo, k -> new ArrayList<>()).add("Invalid character");
         return v;
     }
 
@@ -65,7 +67,8 @@ public class MarketplaceController {
         if (v == null) return null;
         try {
             double n = Double.parseDouble(v.trim());
-            if (n < min || (max != null && n > max) || Double.isNaN(n)) throw new NumberFormatException();
+            // «1e999» dá Infinity em Double.parseDouble e rebentava em BigDecimal.valueOf (500).
+            if (n < min || (max != null && n > max) || Double.isNaN(n) || Double.isInfinite(n)) throw new NumberFormatException();
             return n;
         } catch (NumberFormatException e) {
             erros.computeIfAbsent(campo, k -> new ArrayList<>()).add("Expected number");

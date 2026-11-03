@@ -74,6 +74,10 @@ public class RegistoService {
         if (!Boolean.TRUE.equals(body.termsAccepted())) {
             throw new ValidationException("É necessário aceitar os Termos de Uso e a Política de Privacidade.");
         }
+        // O PostgreSQL recusa o carácter NUL em texto; sem isto o erro só aparecia ao gravar, como «Já existe um registo» (409).
+        if (body.name().indexOf('\u0000') >= 0 || body.email().indexOf('\u0000') >= 0) {
+            throw new ValidationException("O nome e o email não podem conter caracteres de controlo.");
+        }
         String email = body.email().trim().toLowerCase();
         String erroSenha = passwordPolicy.validar(body.password(), PersonaRole.COMPANY_ADMIN, email);
         if (erroSenha != null) throw new ValidationException(erroSenha);

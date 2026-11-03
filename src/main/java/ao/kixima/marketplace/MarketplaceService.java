@@ -162,6 +162,8 @@ public class MarketplaceService {
         return new Where(String.join(" AND ", cond), params);
     }
 
+    private static final int MAX_PAGINA = 1_000_000;
+
     private static final String FROM = " FROM products p JOIN companies c ON c.id = p.supplier_id WHERE ";
 
     // --- search -------------------------------------------------------------------
@@ -182,7 +184,8 @@ public class MarketplaceService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> search(Filtros filters, String userId) {
-        int page = Math.max(1, filters.page() == null ? 1 : filters.page());
+        // Tecto da página: (page - 1) * limit em int transbordava com page ≥ 44 739 244 e o OFFSET negativo voltava como 409.
+        int page = Math.min(MAX_PAGINA, Math.max(1, filters.page() == null ? 1 : filters.page()));
         int limit = Math.min(48, Math.max(1, filters.limit() == null ? 16 : filters.limit()));
         Where where = buildWhere(filters);
         String orderBy = SORTS.getOrDefault(filters.sort() == null ? "relevantes" : filters.sort(), SORTS.get("relevantes"));
