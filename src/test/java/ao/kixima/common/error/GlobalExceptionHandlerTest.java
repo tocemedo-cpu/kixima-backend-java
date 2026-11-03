@@ -84,6 +84,9 @@ class GlobalExceptionHandlerTest {
         // Pooler sem o utilizador / senha recusada (classe 28) e ligações a mais (53300).
         assertTrue(GlobalExceptionHandler.baseIndisponivel(new RuntimeException(new SQLException("FATAL: password authentication failed", "28P01"))));
         assertTrue(GlobalExceptionHandler.baseIndisponivel(new RuntimeException(new SQLException("too many connections", "53300"))));
+        // Sem GRANT nas tabelas (ou política de Row Level Security): configuração da base, não bug do pedido.
+        assertTrue(GlobalExceptionHandler.baseIndisponivel(new RuntimeException(new SQLException("ERROR: permission denied for table companies", "42501"))));
+        assertTrue(GlobalExceptionHandler.baseIndisponivel(new RuntimeException(new SQLException("new row violates row-level security policy for table \"audit_logs\"", "42501"))));
     }
 
     @Test
@@ -93,5 +96,21 @@ class GlobalExceptionHandlerTest {
         var r = handler.handleUnexpected(new IllegalStateException("bug a sério"), req);
         assertEquals(500, r.getStatusCode().value());
         assertEquals("INTERNAL_ERROR", r.getBody().error().code());
+    }
+
+    @Test
+    void permissionDeniedNaBaseDa503ESemRevelarOMotivo() {
+        var causa = new SQLException("ERROR: permission denied for table companies", "42501");
+        var r = handler.handleUnexpected(new org.springframework.dao.InvalidDataAccessResourceUsageException("could not execute statement", causa), req);
+        assertEquals(503, r.getStatusCode().value());
+        assertEquals("SERVICO_INDISPONIVEL", r.getBody().error().code());
+        assertFalse(r.getBody().error().message().contains("companies"), "a resposta não pode revelar tabelas nem a causa");
+    }
+
+    @Test
+    void erroDeSqlQueNaoEDePermissaoContinuaA500() {
+        var r = handler.handleUnexpected(new org.springframework.dao.InvalidDataAccessResourceUsageException("x",
+                new SQLException("ERROR: column \"foo\" does not exist", "42703")), req);
+        assertEquals(500, r.getStatusCode().value());
     }
 }

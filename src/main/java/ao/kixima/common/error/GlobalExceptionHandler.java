@@ -181,8 +181,13 @@ public class GlobalExceptionHandler {
     // a quem chama (e ao monitor), e a causa real fica no registo — antes saía como o mesmo 500
     // genérico de qualquer bug, sem distinção. O `/ready` já fazia esta distinção (503 `degradado`).
 
-    /** Classes SQLSTATE de "a base não está disponível": 08 ligação, 28 autorização, 53300 ligações a mais, 57P0x paragem. */
-    private static final List<String> SQLSTATE_BASE_INDISPONIVEL = List.of("08", "28", "53300", "57P0");
+    /**
+     * Classes SQLSTATE de "a base não está disponível": 08 ligação, 28 autorização, 53300 ligações a mais, 57P0x paragem
+     * e 42501 (insufficient_privilege: «permission denied for table …» ou política de Row Level Security). O 42501 é uma
+     * falha de CONFIGURAÇÃO da base (o utilizador da aplicação sem {@code GRANT}, p. ex. após restaurar um dump com outro
+     * utilizador), não um erro do pedido: repetir não ajuda e responder 500 fazia-o passar por bug. A causa real fica no registo.
+     */
+    private static final List<String> SQLSTATE_BASE_INDISPONIVEL = List.of("08", "28", "42501", "53300", "57P0");
 
     /** Percorre a cadeia de causas à procura de uma falha de ligação à base (e não de uma falha de SQL). */
     static boolean baseIndisponivel(Throwable ex) {

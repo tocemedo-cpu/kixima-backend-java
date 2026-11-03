@@ -8,7 +8,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +27,18 @@ public class HealthController {
 
     private static final Logger log = LoggerFactory.getLogger(HealthController.class);
     private static final long TEMPO_LIMITE_MS = 3000;
+
+    /** Tabelas sem as quais nenhum fluxo funciona: contas, empresas, catálogo, ordens e a auditoria que todos os fluxos gravam. */
+    static final List<String> TABELAS_CENTRAIS = List.of("users", "companies", "products", "purchase_orders", "audit_logs");
+
+    /** Uma tabela central: existe? o utilizador da base lê? escreve? (só o catálogo é consultado). */
+    record Sonda(String tabela, boolean existe, boolean leitura, boolean escrita) {
+    }
+
+    private static final String SQL_SONDA = "SELECT t.name, to_regclass(t.name) IS NOT NULL AS existe, "
+            + "COALESCE(has_table_privilege(to_regclass(t.name), 'SELECT'), false) AS leitura, "
+            + "COALESCE(has_table_privilege(to_regclass(t.name), 'INSERT') AND has_table_privilege(to_regclass(t.name), 'UPDATE'), false) AS escrita "
+            + "FROM (VALUES " + String.join(",", TABELAS_CENTRAIS.stream().map(t -> "('" + t + "')").toList()) + ") AS t(name)";
 
     private final JdbcTemplate jdbcTemplate;
     private final Environment environment;
@@ -52,10 +66,25 @@ public class HealthController {
         long inicio = System.currentTimeMillis();
         Map<String, Object> m = new LinkedHashMap<>();
         try {
-            CompletableFuture.runAsync(() -> jdbcTemplate.queryForObject("SELECT 1", Integer.class))
-                    .get(TEMPO_LIMITE_MS, TimeUnit.MILLISECONDS);
+            List<Sonda> sondas = CompletableFuture.supplyAsync(() -> {
+                jdbcTemplate.queryForObject("SELECT 1", Integer.class);
+                return jdbcTemplate.query(SQL_SONDA, (rs, i) ->
+                        new Sonda(rs.getString("name"), rs.getBoolean("existe"), rs.getBoolean("leitura"), rs.getBoolean("escrita")));
+            }).get(TEMPO_LIMITE_MS, TimeUnit.MILLISECONDS);
+            String problema = problemasDeAcesso(sondas);
+            if (problema != null) {
+                // A ligação funciona mas o utilizador da base não consegue usar as tabelas: não está pronto.
+                log.error("Readiness: a base responde mas o utilizador da aplicação não consegue usar as tabelas: {}", problema);
+                m.put("status", "degradado");
+                m.put("database", "ok");
+                m.put("tables", "inacessiveis");
+                m.put("detail", problema);
+                m.put("latencyMs", System.currentTimeMillis() - inicio);
+                return ResponseEntity.status(503).body(m);
+            }
             m.put("status", "ok");
             m.put("database", "ok");
+            m.put("tables", "ok");
             m.put("latencyMs", System.currentTimeMillis() - inicio);
             m.put("env", env());
             return ResponseEntity.ok(m);
@@ -69,5 +98,17 @@ public class HealthController {
             m.put("latencyMs", System.currentTimeMillis() - inicio);
             return ResponseEntity.status(503).body(m);
         }
+    }
+
+    /** {@code null} se tudo bate certo; senão, o que falta por tabela (nunca nomes de utilizador nem credenciais). */
+    static String problemasDeAcesso(List<Sonda> sondas) {
+        List<String> falhas = new ArrayList<>();
+        for (String tabela : TABELAS_CENTRAIS) {
+            Sonda sonda = sondas.stream().filter(x -> x.tabela().equals(tabela)).findFirst().orElse(null);
+            if (sonda == null || !sonda.existe()) falhas.add(tabela + ": não existe (migrações por aplicar?)");
+            else if (!sonda.leitura()) falhas.add(tabela + ": sem permissão de leitura");
+            else if (!sonda.escrita()) falhas.add(tabela + ": sem permissão de escrita");
+        }
+        return falhas.isEmpty() ? null : String.join("; ", falhas);
     }
 }
