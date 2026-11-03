@@ -1,5 +1,8 @@
 package ao.kixima.invite;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -36,10 +39,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class InviteControllerTest {
+    private static final String SENHA_FORTE = Contas.senhaNova();
+    private static final String SENHA_OUTRA = Contas.senhaNova();
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+    private static final String ALGUEM_EMAIL = Contas.emailUnico("alguem");
+    private static final String NOVO_COMPRADOR_EMAIL = Contas.emailUnico("novo.comprador");
+
+
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
 
     @Autowired
     private MockMvc mockMvc;
@@ -71,7 +80,7 @@ class InviteControllerTest {
         mockMvc.perform(post("/api/companies/invites")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("role", "FORNECEDOR", "name", "Alguém", "email", "alguem@exemplo.co.ao"))))
+                        .content(objectMapper.writeValueAsString(Map.of("role", "FORNECEDOR", "name", "Alguém", "email", ALGUEM_EMAIL))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("BUSINESS_RULE_VIOLATION"));
 
@@ -79,7 +88,7 @@ class InviteControllerTest {
         mockMvc.perform(post("/api/companies/invites")
                         .header("Authorization", "Bearer " + compradorToken)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("role", "COMPRADOR", "name", "Novo Comprador", "email", "novo.comprador@petroangola.co.ao"))))
+                        .content(objectMapper.writeValueAsString(Map.of("role", "COMPRADOR", "name", "Novo Comprador", "email", NOVO_COMPRADOR_EMAIL))))
                 .andExpect(status().isForbidden());
 
         // Já existe conta com este email.
@@ -93,10 +102,10 @@ class InviteControllerTest {
         var criarRes = mockMvc.perform(post("/api/companies/invites")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("role", "COMPRADOR", "name", "Novo Comprador", "email", "novo.comprador@petroangola.co.ao"))))
+                        .content(objectMapper.writeValueAsString(Map.of("role", "COMPRADOR", "name", "Novo Comprador", "email", NOVO_COMPRADOR_EMAIL))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDENTE"))
-                .andExpect(jsonPath("$.companyName").value("Petro Angola Operações, Lda"))
+                .andExpect(jsonPath("$.companyName").value(Contas.nomeDaEmpresa(Persona.COMPANY_ADMIN)))
                 .andReturn();
         String inviteId = objectMapper.readTree(criarRes.getResponse().getContentAsString()).get("id").asText();
         entityManager.flush();
@@ -112,22 +121,22 @@ class InviteControllerTest {
         // Resolução pública — sem sessão.
         mockMvc.perform(get("/api/companies/invite/" + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.companyName").value("Petro Angola Operações, Lda"))
+                .andExpect(jsonPath("$.companyName").value(Contas.nomeDaEmpresa(Persona.COMPANY_ADMIN)))
                 .andExpect(jsonPath("$.role").value("COMPRADOR"))
                 .andExpect(jsonPath("$.name").value("Novo Comprador"));
 
         // Aceitar sem aceitar os Termos é rejeitado.
         mockMvc.perform(post("/api/companies/invite/" + token + "/accept")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("password", "SenhaForte@123"))))
+                        .content(objectMapper.writeValueAsString(Map.of("password", SENHA_FORTE))))
                 .andExpect(status().isUnprocessableEntity());
 
         // Aceitação — cria a conta, inativa (perfil COMPRADOR, não é convite de fundação).
         var aceitarRes = mockMvc.perform(post("/api/companies/invite/" + token + "/accept")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("password", "SenhaForte@123", "termsAccepted", true))))
+                        .content(objectMapper.writeValueAsString(Map.of("password", SENHA_FORTE, "termsAccepted", true))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value("novo.comprador@petroangola.co.ao"))
+                .andExpect(jsonPath("$.email").value(NOVO_COMPRADOR_EMAIL))
                 .andExpect(jsonPath("$.role").value("COMPRADOR"))
                 .andExpect(jsonPath("$.active").value(false))
                 .andReturn();
@@ -138,13 +147,13 @@ class InviteControllerTest {
         // Um segundo pedido com o mesmo token já não serve — o convite foi ACEITO.
         mockMvc.perform(post("/api/companies/invite/" + token + "/accept")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("password", "OutraSenha@123", "termsAccepted", true))))
+                        .content(objectMapper.writeValueAsString(Map.of("password", SENHA_OUTRA, "termsAccepted", true))))
                 .andExpect(status().isBadRequest());
 
         // A conta ainda não pode entrar — está inativa (à espera de aprovação do Company Admin).
         mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("email", "novo.comprador@petroangola.co.ao", "password", "SenhaForte@123"))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", NOVO_COMPRADOR_EMAIL, "password", SENHA_FORTE))))
                 .andExpect(status().isForbidden());
 
         // O Company Admin ativa.
@@ -161,7 +170,7 @@ class InviteControllerTest {
         // Agora já entra.
         mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("email", "novo.comprador@petroangola.co.ao", "password", "SenhaForte@123"))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", NOVO_COMPRADOR_EMAIL, "password", SENHA_FORTE))))
                 .andExpect(status().isOk());
 
         // Bloquear — não pode bloquear a própria conta nem o Company Admin.
@@ -192,7 +201,7 @@ class InviteControllerTest {
             mockMvc.perform(post("/api/companies/invites")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType("application/json")
-                            .content(objectMapper.writeValueAsString(Map.of("role", role, "name", "Alguém", "email", "alguem@exemplo.co.ao"))))
+                            .content(objectMapper.writeValueAsString(Map.of("role", role, "name", "Alguém", "email", ALGUEM_EMAIL))))
                     .andExpect(status().isUnprocessableEntity())
                     .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
                     .andExpect(jsonPath("$.error.message").value("Dados inválidos."))

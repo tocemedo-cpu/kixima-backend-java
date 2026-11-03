@@ -1,5 +1,6 @@
 package ao.kixima.user;
 
+
 import ao.kixima.security.PersonaRole;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +34,7 @@ class PasswordPolicyTest {
 
     @Test
     void recusaAsSenhasMaisUsadasDoMundo() {
-        for (String s : new String[]{"12345678", "password123", "kixima2026", "Kixima@123"}) {
+        for (String s : new String[]{"12345678", "password123", "kixima2026", "senha1234"}) {
             assertThat(politica.validar(s)).isNotNull();
         }
     }

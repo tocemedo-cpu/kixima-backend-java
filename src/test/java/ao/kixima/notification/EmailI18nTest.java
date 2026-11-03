@@ -1,5 +1,8 @@
 package ao.kixima.notification;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -40,8 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class EmailI18nTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
 
     @Autowired
     private MockMvc mockMvc;

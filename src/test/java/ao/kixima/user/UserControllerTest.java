@@ -1,5 +1,8 @@
 package ao.kixima.user;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -34,11 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class UserControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
-    private static final String FINANCEIRO_EMAIL = "financeiro@petroangola.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
+    private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
     private static final byte[] PNG = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52};
 
     @Autowired
@@ -124,7 +127,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("attachment; filename=\"kixima-dados-")))
                 .andExpect(jsonPath("$.conta.email").value(COMPRADOR_EMAIL))
-                .andExpect(jsonPath("$.conta.company.taxId").value("AO-CLI-0001"))
+                .andExpect(jsonPath("$.conta.company.taxId").value(Contas.nifDaEmpresa(Persona.COMPRADOR)))
                 .andExpect(jsonPath("$.atividade.ordensCriadas").isArray())
                 .andExpect(jsonPath("$.atividade.registoDeAcoes").isArray())
                 .andExpect(jsonPath("$.totais.ordensCriadas").isNumber());
@@ -132,10 +135,10 @@ class UserControllerTest {
 
     @Test
     void eliminarEUmaAnonimizacaoQuePreservaOTrilhoEFechaAConta() throws Exception {
-        String empresaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
+        String empresaId = jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = ?", String.class, COMPRADOR_EMAIL);
         String hash = jdbcTemplate.queryForObject("SELECT password_hash FROM users WHERE email = ?", String.class, COMPRADOR_EMAIL);
         String vitimaId = UUID.randomUUID().toString();
-        String email = "esquecer-" + System.currentTimeMillis() + "@petroangola.co.ao";
+        String email = Contas.emailUnico("esquecer");
         jdbcTemplate.update("INSERT INTO users (id, name, email, password_hash, role, company_id, active, locale, updated_at) "
                 + "VALUES (?, 'Pessoa a Esquecer', ?, ?, 'COMPRADOR', ?, true, 'fr', now())", vitimaId, email, hash, empresaId);
         jdbcTemplate.update("INSERT INTO audit_logs (id, action, entity_type, actor_id, actor_name, created_at) "

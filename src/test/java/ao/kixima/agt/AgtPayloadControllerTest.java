@@ -1,5 +1,8 @@
 package ao.kixima.agt;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -48,10 +51,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class AgtPayloadControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
     private static final String SUPPLIER_TAX_ID = "AO-FOR-0001";
     private static final String PRODUCT_NAME = "Mangueira hidráulica de alta pressão 2\"";
     private static final String ESTABLISHMENT_NUMBER = "1";
@@ -216,7 +219,7 @@ class AgtPayloadControllerTest {
 
     @Test
     void solicitarSerieSemSandboxConfiguradaDevolve503() throws Exception {
-        String adminToken = login("admin@kixima.co.ao");
+        String adminToken = login(Contas.email(Persona.ADMIN_SISTEMA));
         mockMvc.perform(get("/api/faturacao/agt-serie-payload")
                         .header("Authorization", "Bearer " + adminToken)
                         .param("ano", String.valueOf(Year.now().getValue()))

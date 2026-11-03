@@ -1,5 +1,8 @@
 package ao.kixima.common;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +58,7 @@ class DecimaisJsonTest {
     @Test
     void oCatalogoDevolveUnitPriceComoTextoComoONode() throws Exception {
         var login = mockMvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"comprador@petroangola.co.ao\",\"password\":\"Kixima@123\"}"))
+                        .content(objectMapper.writeValueAsString(Map.of("email", Contas.email(Persona.COMPRADOR), "password", Contas.senha()))))
                 .andExpect(status().isOk()).andReturn();
         String token = objectMapper.readTree(login.getResponse().getContentAsString()).get("token").asText();
         mockMvc.perform(get("/api/catalog").header("Authorization", "Bearer " + token))

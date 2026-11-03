@@ -1,5 +1,8 @@
 package ao.kixima.catalog;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -31,9 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class ReviewControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
 
     @Autowired
     private MockMvc mockMvc;

@@ -1,5 +1,8 @@
 package ao.kixima.realtime;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +43,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 class RealtimeStompTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
 
     @LocalServerPort
     private int port;
@@ -65,6 +68,20 @@ class RealtimeStompTest {
     @AfterEach
     void fechar() {
         for (StompSession s : sessoes) if (s.isConnected()) s.disconnect();
+        for (String id : pedidosCriados) jdbcTemplate.update("DELETE FROM support_tickets WHERE id = ?", id);
+        pedidosCriados.clear();
+    }
+
+    private final List<String> pedidosCriados = new ArrayList<>();
+
+    private String criarPedidoDeSuporte(String emailDoAutor) {
+        String id = java.util.UUID.randomUUID().toString();
+        jdbcTemplate.update("INSERT INTO support_tickets (id, reference, user_id, subject, category, message, status, created_at, updated_at) "
+                        + "SELECT ?, ?, u.id, 'Pedido de teste', 'OUTRO', 'Pedido criado pelo teste.', 'ABERTO'::\"SupportStatus\", now(), now() "
+                        + "FROM users u WHERE u.email = ?",
+                id, "TMP-" + id.substring(0, 8), emailDoAutor);
+        pedidosCriados.add(id);
+        return id;
     }
 
     private String login(String email) {
@@ -138,8 +155,10 @@ class RealtimeStompTest {
 
     @Test
     void aSalaDeSuporteSoParaQuemTemAcessoAoPedido() throws Exception {
-        String meuTicket = jdbcTemplate.queryForObject("SELECT id FROM support_tickets WHERE reference = ?", String.class, "SUP-2026-00001");
-        String ticketDeOutro = jdbcTemplate.queryForObject("SELECT id FROM support_tickets WHERE reference = ?", String.class, "SUP-2026-00002");
+        // Os pedidos de suporte são criados aqui, para os utilizadores temporários (nada depende de dados de exemplo de
+        // outros utilizadores). Este teste corre com o servidor real e outros fios, por isso não há rollback: apagam-se no fim.
+        String meuTicket = criarPedidoDeSuporte(COMPRADOR_EMAIL);
+        String ticketDeOutro = criarPedidoDeSuporte(Contas.email(Persona.FORNECEDOR));
         String token = login(COMPRADOR_EMAIL);
 
         Ligacao comprador = ligar(token);

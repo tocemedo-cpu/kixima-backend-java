@@ -1,5 +1,8 @@
 package ao.kixima.po;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.common.error.ConflictException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +51,7 @@ class PoConcurrencyTest {
     private String criarPoAguardandoAprovacao() {
         String compradorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
         String fornecedorId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-FOR-0001");
-        String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, "comprador@petroangola.co.ao");
+        String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.COMPRADOR));
         String id = UUID.randomUUID().toString();
         jdbcTemplate.update("INSERT INTO purchase_orders (id, reference, buyer_company_id, supplier_company_id, created_by_id, total_amount, status, created_at, updated_at) "
                         + "VALUES (?, ?, ?, ?, ?, 1, 'AGUARDANDO_APROVACAO'::\"PoStatus\", now(), now())",
@@ -65,7 +68,7 @@ class PoConcurrencyTest {
     void duasAprovacoesConcorrentesDaMesmaPoNuncaAprovamAsDuas() throws Exception {
         poId = criarPoAguardandoAprovacao();
         String compradorId = jdbcTemplate.queryForObject("SELECT buyer_company_id FROM purchase_orders WHERE id = ?", String.class, poId);
-        String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, "admin@petroangola.co.ao");
+        String userId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.COMPANY_ADMIN));
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch partida = new CountDownLatch(1);

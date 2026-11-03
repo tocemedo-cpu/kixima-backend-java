@@ -1,5 +1,8 @@
 package ao.kixima.user;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.common.error.ValidationException;
 import ao.kixima.notification.EmailDispatchService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,8 +43,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @Transactional
 class LoginLockoutEmailTest {
 
-    private static final String EMAIL = "comprador@petroangola.co.ao";
-    private static final String SENHA = "Kixima@123";
+    private static final String EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String SENHA = Contas.senha();
 
     @Autowired
     private MockMvc mockMvc;

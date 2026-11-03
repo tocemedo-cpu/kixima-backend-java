@@ -1,5 +1,8 @@
 package ao.kixima.admin;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,9 +31,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class BackupAdminControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
 
     @Autowired
     private MockMvc mockMvc;

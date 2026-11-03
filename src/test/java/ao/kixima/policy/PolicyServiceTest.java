@@ -1,5 +1,8 @@
 package ao.kixima.policy;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.policy.dto.ClientPolicyDto;
 import ao.kixima.policy.dto.PolicyRequest;
 import org.junit.jupiter.api.Test;
@@ -40,7 +43,7 @@ class PolicyServiceTest {
         String petroangolaId = jdbcTemplate.queryForObject(
                 "SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
         String adminId = jdbcTemplate.queryForObject(
-                "SELECT id FROM users WHERE email = ?", String.class, "admin@kixima.co.ao");
+                "SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.ADMIN_SISTEMA));
 
         Instant agora = Instant.now();
 

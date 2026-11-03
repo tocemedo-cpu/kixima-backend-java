@@ -1,5 +1,8 @@
 package ao.kixima.faturacao;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -44,10 +47,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class FaturacaoControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
     private static final String SERIE = "TESTE";
     private static final String SERIE_NC = SERIE + "-NC";
 

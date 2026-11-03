@@ -80,6 +80,26 @@ mvn test          # corre a suite JUnit contra localhost:5432/kixima_test
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
+### Testes: utilizadores temporários (nenhum utilizador de teste está programado)
+
+**Nenhum utilizador de teste existe no código, nas migrações, nos seeds ou na configuração.** Os testes criam os seus
+utilizadores durante a execução (`src/test/java/ao/kixima/testsupport/Contas.java`): um por papel
+(`COMPRADOR`, `COMPANY_ADMIN`, `FINANCEIRO`, `FORNECEDOR`, `ADMIN_SISTEMA`), com **email e senha aleatórios gerados nessa
+execução** (domínio reservado `contas-temporarias.invalid`), e apagam-nos no fim (gancho de saída da JVM; se uma
+execução morrer, a seguinte apaga o que sobrou). Os testes `@Transactional` fazem rollback do resto.
+
+- Só correm numa base cujo nome contenha `test` (`kixima_test`): a `Contas` recusa qualquer outra, e nunca toca na produção.
+- O `Contas` prepara o schema (Flyway, V1 + V2) antes de criar as contas, por isso uma `kixima_test` **vazia** serve.
+- Os utilizadores ligam-se às empresas dos dados de negócio de exemplo (NIF `AO-CLI-0001`, `AO-FOR-0001`), se existirem;
+  se não existirem, cria-se uma empresa temporária. Os testes que precisam de produtos, ordens, faturas, contratos…
+  continuam a precisar desses **dados de negócio** na base de testes (não de utilizadores).
+- **A base de testes não deve ter utilizadores dos dados de exemplo antigos** (os 5 do seed Node) activos nas mesmas
+  empresas: somados aos temporários, ultrapassam os lugares do plano (CORE = 5) e 4 testes sensíveis ao número de
+  utilizadores falham (`AssinaturaControllerTest`, `InviteControllerTest`, `ContractControllerTest`,
+  `MfaReminderServiceTest`).
+- `SemUtilizadoresProgramadosTest` falha se voltar a aparecer uma conta/senha fixa ou um `INSERT INTO users` em código,
+  migrações, configuração ou docs.
+
 Variáveis de ambiente principais (ver `application.yml` para a lista
 completa — está tudo documentado inline):
 

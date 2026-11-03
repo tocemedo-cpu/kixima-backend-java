@@ -1,5 +1,8 @@
 package ao.kixima.cobranca;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.company.CompanyPlan;
 import ao.kixima.plan.PlanService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,10 +43,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class AssinaturaControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String FINANCEIRO_EMAIL = "financeiro@petroangola.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
     private static final byte[] COMPROVATIVO = "%PDF-1.4 transferencia BAI subscricao".getBytes(StandardCharsets.UTF_8);
 
     @Autowired

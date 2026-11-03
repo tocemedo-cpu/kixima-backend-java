@@ -1,5 +1,8 @@
 package ao.kixima.marketplace;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -32,8 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class MarketplaceControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
 
     @Autowired
     private MockMvc mockMvc;
@@ -121,7 +124,7 @@ class MarketplaceControllerTest {
                 .andExpect(jsonPath("$[?(@.id=='" + id + "')]").exists());
 
         // Tentar remover como outro utilizador não faz nada — a query filtra por userId.
-        String outroToken = login("fornecedor@kianda.co.ao");
+        String outroToken = login(Contas.email(Persona.FORNECEDOR));
         mockMvc.perform(delete("/api/marketplace/saved-searches/" + id).header("Authorization", "Bearer " + outroToken))
                 .andExpect(status().isOk());
         var aindaLaRes = mockMvc.perform(get("/api/marketplace/saved-searches").header("Authorization", "Bearer " + token)).andReturn();

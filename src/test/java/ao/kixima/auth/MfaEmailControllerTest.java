@@ -1,5 +1,8 @@
 package ao.kixima.auth;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.common.error.BadGatewayException;
 import ao.kixima.notification.EmailDispatchService;
 import ao.kixima.security.TotpService;
@@ -61,8 +64,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @Transactional
 class MfaEmailControllerTest {
 
-    private static final String EMAIL = "comprador@petroangola.co.ao";
-    private static final String PASSWORD = "Kixima@123";
+    private static final String EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String PASSWORD = Contas.senha();
     private static final Pattern CODIGO = Pattern.compile("\\b(\\d{6})\\b");
 
     @Autowired
@@ -145,7 +148,7 @@ class MfaEmailControllerTest {
 
         MvcResult envio = pedir("/api/auth/2fa/email/enviar", token, null);
         assertThat(envio.getResponse().getStatus()).isEqualTo(200);
-        assertThat(json(envio).get("enviadoPara").asText()).matches(".*@petroangola\\.co\\.ao$");
+        assertThat(json(envio).get("enviadoPara").asText()).endsWith("@" + Contas.DOMINIO);
         assertThat(json(envio).get("validadeMinutos").asInt()).isEqualTo(10);
         assertThat(json(envio).has("reaproveitado")).isFalse();
         assertThat(enviados).hasSize(1);
@@ -199,13 +202,13 @@ class MfaEmailControllerTest {
         String token = entrar().get("token").asText();
         MvcResult res = mockMvc.perform(get("/api/auth/2fa/status").header("Authorization", "Bearer " + token)).andReturn();
         assertThat(json(res).get("emailIndisponivel").asText()).containsPattern("(?i)não está configurado");
-        assertThat(json(res).get("email").asText()).isEqualTo("c****r@petroangola.co.ao");
+        assertThat(json(res).get("email").asText()).isEqualTo(mascarado(Contas.email(Persona.COMPRADOR)));
     }
 
     @Test
     void oEmailMostradoVemMascarado() {
-        assertThat(mfaEmailService.mascarar("comprador@petroangola.co.ao")).isEqualTo("c****r@petroangola.co.ao");
-        assertThat(mfaEmailService.mascarar("ab@x.ao")).isEqualTo("a@x.ao");
+        assertThat(mfaEmailService.mascarar(Contas.email(Persona.COMPRADOR))).isEqualTo(mascarado(Contas.email(Persona.COMPRADOR)));
+        assertThat(mfaEmailService.mascarar("ab@" + Contas.DOMINIO)).isEqualTo("a@" + Contas.DOMINIO);
     }
 
     @Test
@@ -300,7 +303,7 @@ class MfaEmailControllerTest {
         assertThat(login.get("requires2fa").asBoolean()).isTrue();
         assertThat(login.get("metodo").asText()).isEqualTo("EMAIL");
         assertThat(login.has("token")).isFalse();
-        assertThat(login.get("enviadoPara").asText()).isEqualTo("c****r@petroangola.co.ao");
+        assertThat(login.get("enviadoPara").asText()).isEqualTo(mascarado(Contas.email(Persona.COMPRADOR)));
         assertThat(enviados).hasSize(1);
         assertThat(enviados.get(0).assunto()).isEqualTo("Código de acesso KIXIMA");
 
@@ -358,7 +361,7 @@ class MfaEmailControllerTest {
 
         MvcResult re = pedir("/api/auth/2fa/reenviar", null, Map.of("challenge", login.get("challenge").asText()));
         assertThat(re.getResponse().getStatus()).isEqualTo(200);
-        assertThat(json(re).get("enviadoPara").asText()).isEqualTo("c****r@petroangola.co.ao");
+        assertThat(json(re).get("enviadoPara").asText()).isEqualTo(mascarado(Contas.email(Persona.COMPRADOR)));
         assertThat(enviados).hasSize(2);
 
         // O código antigo deixou de servir; só o novo entra.
@@ -404,5 +407,11 @@ class MfaEmailControllerTest {
         MvcResult re = pedir("/api/auth/2fa/reenviar", null, Map.of("challenge", login.get("challenge").asText()));
         assertThat(re.getResponse().getStatus()).isGreaterThanOrEqualTo(400);
         assertThat(mensagemDeErro(re)).containsPattern("(?i)app de autenticação");
+    }
+
+    /** Forma do email mascarado: primeira letra, quatro asteriscos e a última letra do nome (ex.: c****r@domínio). */
+    private static String mascarado(String email) {
+        String nome = email.substring(0, email.indexOf('@'));
+        return nome.charAt(0) + "****" + nome.charAt(nome.length() - 1) + email.substring(email.indexOf('@'));
     }
 }

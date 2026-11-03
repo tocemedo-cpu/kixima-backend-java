@@ -1,5 +1,6 @@
-# Perfil de testes JUnit — base Postgres local (a suite repõe o schema e os
-# dados de exemplo antes de correr; ver README.md).
+# Perfil de testes JUnit — base Postgres local `kixima_test`. O schema aplica-se por Flyway (ver abaixo); os
+# utilizadores NÃO estão aqui nem em nenhum seed: os testes criam-nos em runtime e apagam-nos no fim
+# (src/test/java/ao/kixima/testsupport/Contas.java). Ver README.md, "Testes: utilizadores temporários".
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/kixima_test

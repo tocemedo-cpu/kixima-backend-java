@@ -1,5 +1,8 @@
 package ao.kixima.security;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.audit.Actor;
 import ao.kixima.notification.EmailDispatchService;
 import ao.kixima.security.dto.EnviarLembretesResultDto;
@@ -35,8 +38,8 @@ import static org.mockito.Mockito.when;
 @Transactional
 class MfaReminderServiceTest {
 
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
 
     @Autowired
     private MfaReminderService mfaReminderService;

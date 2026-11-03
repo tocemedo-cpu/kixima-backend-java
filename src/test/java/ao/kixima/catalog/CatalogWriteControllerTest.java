@@ -1,5 +1,8 @@
 package ao.kixima.catalog;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -51,9 +54,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class CatalogWriteControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
     private static final byte[] PNG = Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
     private static final byte[] PDF = "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF".getBytes(StandardCharsets.UTF_8);

@@ -1,5 +1,8 @@
 package ao.kixima.company;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -42,13 +45,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class CompanyControllerTest {
+    private static final String SENHA_FORTE = Contas.senhaNova();
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FINANCEIRO_EMAIL = "financeiro@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String ASSESSOR_CADASTRO_EMAIL = Contas.emailUnico("assessor.cadastro");
+    private static final String ASSESSOR_FINANCEIRO_EMAIL = Contas.emailUnico("assessor.financeiro");
+    private static final String SUPER_EMAIL = Contas.emailUnico("super");
+    private static final String FRACO_EMAIL = Contas.emailUnico("fraco");
+    private static final String NOVO_COMPRADOR_EMAIL = Contas.emailUnico("novo.comprador");
+    private static final String VENDEDOR2_EMAIL = Contas.emailUnico("vendedor2");
+
+
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
     private static final byte[] PDF = "%PDF-1.4 documento de teste".getBytes(StandardCharsets.UTF_8);
 
     @Autowired
@@ -106,7 +118,7 @@ class CompanyControllerTest {
         m.put("contactEmail", "geral@nova-" + sufixo + ".co.ao");
         m.put("adminName", "Admin Nova");
         m.put("adminEmail", "admin@nova-" + sufixo + ".co.ao");
-        m.put("adminPassword", "SenhaForte@2026xyz");
+        m.put("adminPassword", SENHA_FORTE);
         m.put("employees", "300");
         m.put("termsAccepted", "true");
         return m;
@@ -177,7 +189,7 @@ class CompanyControllerTest {
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM notifications WHERE type = 'CADASTRO_EMPRESA_APROVADO' AND company_id = ?", Integer.class, novaId)).isEqualTo(1);
 
         // Depois de aprovada, o Company Admin criado no cadastro entra e vê a ficha (documentos incluídos).
-        String novoAdminToken = login("admin@nova-" + sufixo + ".co.ao", "SenhaForte@2026xyz");
+        String novoAdminToken = login("admin@nova-" + sufixo + ".co.ao", SENHA_FORTE);
         mockMvc.perform(get("/api/companies/" + novaId).header("Authorization", "Bearer " + novoAdminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.documents.length()").value(2))
@@ -347,11 +359,11 @@ class CompanyControllerTest {
         // ligação/transacção do teste — sem este flush explícito, a leitura seguinte não vê a escrita.
         entityManager.flush();
 
-        criarAssessor("assessor.cadastro@kixima.co.ao", "cadastro");
-        criarAssessor("assessor.financeiro@kixima.co.ao", "cadastro", "financeiro");
+        criarAssessor(ASSESSOR_CADASTRO_EMAIL, "cadastro");
+        criarAssessor(ASSESSOR_FINANCEIRO_EMAIL, "cadastro", "financeiro");
 
         // 1. Sem FINANCEIRO — a listagem não devolve bankName/iban/swift desta (nem de nenhuma) empresa.
-        String semFinanceiroToken = login("assessor.cadastro@kixima.co.ao");
+        String semFinanceiroToken = login(ASSESSOR_CADASTRO_EMAIL);
         var semFinanceiroRes = mockMvc.perform(get("/api/companies").header("Authorization", "Bearer " + semFinanceiroToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '" + companyId + "')]").exists())
@@ -367,7 +379,7 @@ class CompanyControllerTest {
         assertThat(empresaSemFinanceiro.get("bankName").isNull()).isTrue();
 
         // 2. Com FINANCEIRO — acesso permitido, tal como já era no endpoint de uma única empresa.
-        String comFinanceiroToken = login("assessor.financeiro@kixima.co.ao");
+        String comFinanceiroToken = login(ASSESSOR_FINANCEIRO_EMAIL);
         mockMvc.perform(get("/api/companies").header("Authorization", "Bearer " + comFinanceiroToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '" + companyId + "')].iban").value("AO06004000001234567890123"))
@@ -389,42 +401,42 @@ class CompanyControllerTest {
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + companyAdmin)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Novo Comprador", "email", "novo.comprador@petroangola.co.ao",
-                                "password", "SenhaForte@2026xyz", "role", "COMPRADOR"))))
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Novo Comprador", "email", NOVO_COMPRADOR_EMAIL,
+                                "password", SENHA_FORTE, "role", "COMPRADOR"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("COMPRADOR"))
                 .andExpect(jsonPath("$.active").value(true))
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
         entityManager.flush();
-        assertThat(jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = 'novo.comprador@petroangola.co.ao'", String.class))
+        assertThat(jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = '" + NOVO_COMPRADOR_EMAIL + "'", String.class))
                 .isEqualTo(companyIdOf("AO-CLI-0001"));
-        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'UTILIZADOR_CRIADO' AND entity_ref = 'novo.comprador@petroangola.co.ao'", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'UTILIZADOR_CRIADO' AND entity_ref = '" + NOVO_COMPRADOR_EMAIL + "'", Integer.class)).isEqualTo(1);
 
         // Senha fraca (422), email repetido (409), ADMIN_SISTEMA nunca por aqui (422).
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + companyAdmin)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Fraco", "email", "fraco@petroangola.co.ao", "password", "123", "role", "COMPRADOR"))))
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Fraco", "email", FRACO_EMAIL, "password", "123", "role", "COMPRADOR"))))
                 .andExpect(status().isUnprocessableEntity());
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + companyAdmin)
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Repetido", "email", COMPRADOR_EMAIL, "password", "SenhaForte@2026xyz", "role", "COMPRADOR"))))
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Repetido", "email", COMPRADOR_EMAIL, "password", SENHA_FORTE, "role", "COMPRADOR"))))
                 .andExpect(status().isConflict());
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + login(ADMIN_SISTEMA_EMAIL))
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Super", "email", "super@kixima.co.ao", "password", "SenhaForte@2026xyz", "role", "ADMIN_SISTEMA"))))
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Super", "email", SUPER_EMAIL, "password", SENHA_FORTE, "role", "ADMIN_SISTEMA"))))
                 .andExpect(status().isUnprocessableEntity());
 
         // O Admin do Sistema cria em qualquer empresa (companyId no corpo).
         mockMvc.perform(post("/api/companies/users")
                         .header("Authorization", "Bearer " + login(ADMIN_SISTEMA_EMAIL))
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Vendedor Kianda", "email", "vendedor2@kianda.co.ao",
-                                "password", "SenhaForte@2026xyz", "role", "FORNECEDOR", "companyId", kiandaId))))
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Vendedor Kianda", "email", VENDEDOR2_EMAIL,
+                                "password", SENHA_FORTE, "role", "FORNECEDOR", "companyId", kiandaId))))
                 .andExpect(status().isCreated());
         entityManager.flush();
-        assertThat(jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = 'vendedor2@kianda.co.ao'", String.class)).isEqualTo(kiandaId);
+        assertThat(jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = '" + VENDEDOR2_EMAIL + "'", String.class)).isEqualTo(kiandaId);
     }
 }

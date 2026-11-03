@@ -1,5 +1,8 @@
 package ao.kixima.admin;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -44,12 +47,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class AdminControllerTest {
+    private static final String ASSESSOR_SUPORTE_TESTE_EMAIL = Contas.emailUnico("assessor.suporte.teste");
 
-    private static final String PASSWORD = "Kixima@123";
+
+    private static final String PASSWORD = Contas.senha();
     private static final String NEW_PW = "Bomba-Hidraulica-Assessor-7";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
     private static final String S = "adminconvite";
 
     @Autowired
@@ -108,8 +113,8 @@ class AdminControllerTest {
         String companyId = jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = ?", String.class, COMPRADOR_EMAIL);
         String id = UUID.randomUUID().toString();
         jdbcTemplate.update("INSERT INTO users (id, name, email, password_hash, role, company_id, active, created_at, updated_at) "
-                        + "VALUES (?, 'Utilizador Temp', 'temp.perm@petroangola.co.ao', ?, 'COMPRADOR'::\"PersonaRole\", ?, true, now(), now())",
-                id, passwordEncoder.encode("x"), companyId);
+                        + "VALUES (?, 'Utilizador Temp', ?, ?, 'COMPRADOR'::\"PersonaRole\", ?, true, now(), now())",
+                id, Contas.emailUnico("temp.perm"), passwordEncoder.encode("x"), companyId);
         entityManager.clear();
         return id;
     }
@@ -189,8 +194,8 @@ class AdminControllerTest {
     void gerirAreasEReservadoAoSuperAdmin() throws Exception {
         String superAdmin = login(ADMIN_SISTEMA_EMAIL);
         String superAdminId = userId(ADMIN_SISTEMA_EMAIL);
-        String assessorId = criarAssessor("assessor.suporte.teste@kixima.co.ao", SUPORTE);
-        String assessor = login("assessor.suporte.teste@kixima.co.ao");
+        String assessorId = criarAssessor(ASSESSOR_SUPORTE_TESTE_EMAIL, SUPORTE);
+        String assessor = login(ASSESSOR_SUPORTE_TESTE_EMAIL);
 
         var r = mockMvc.perform(patch("/api/admin/users/" + assessorId + "/areas").header("Authorization", "Bearer " + superAdmin)
                         .contentType("application/json").content(objectMapper.writeValueAsString(Map.of("areas", List.of(SUPORTE, OPERACOES)))))

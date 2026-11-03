@@ -1,5 +1,8 @@
 package ao.kixima.common;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -41,7 +44,7 @@ class GlobalExceptionHandlerPedidosInvalidosTest {
     private String login(String email) throws Exception {
         var res = mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Kixima@123"))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", Contas.senha()))))
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(res.getResponse().getContentAsString()).get("token").asText();
@@ -64,7 +67,7 @@ class GlobalExceptionHandlerPedidosInvalidosTest {
     /** `page`/`limit` são `Integer`: um valor não numérico era um 500 (erro de conversão do Spring), agora é um 422 com o campo. */
     @Test
     void tipoErradoNumParametroDa422ComODetalheDoCampo() throws Exception {
-        String token = login("comprador@petroangola.co.ao");
+        String token = login(Contas.email(Persona.COMPRADOR));
         mockMvc.perform(get("/api/notifications").param("page", "abc").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
@@ -73,7 +76,7 @@ class GlobalExceptionHandlerPedidosInvalidosTest {
 
     @Test
     void metodoNaoPermitidoDaOMesmo404DeRotaInexistenteDoNode() throws Exception {
-        String token = login("comprador@petroangola.co.ao");
+        String token = login(Contas.email(Persona.COMPRADOR));
         mockMvc.perform(delete("/api/planos").header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("ROUTE_NOT_FOUND"));
@@ -86,12 +89,12 @@ class GlobalExceptionHandlerPedidosInvalidosTest {
      */
     @Test
     void agtSeriePayloadRespeitaAOrdemDoNodeEnuncaDa500() throws Exception {
-        String comprador = login("comprador@petroangola.co.ao");
+        String comprador = login(Contas.email(Persona.COMPRADOR));
         mockMvc.perform(get("/api/faturacao/agt-serie-payload").header("Authorization", "Bearer " + comprador))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 
-        String admin = login("admin@kixima.co.ao");
+        String admin = login(Contas.email(Persona.ADMIN_SISTEMA));
         var res = mockMvc.perform(get("/api/faturacao/agt-serie-payload").header("Authorization", "Bearer " + admin))
                 .andReturn().getResponse();
         // Sem AGT configurada neste ambiente de teste -> 503 (SERVICO_INDISPONIVEL); com ela -> 422. Nunca 500.

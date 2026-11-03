@@ -1,5 +1,8 @@
 package ao.kixima.company;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.security.JwtService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,8 +44,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class CadastroProgressivoTest {
+    private static final String SENHA_ERRADA = Contas.senhaNova();
 
-    private static final String SENHA = "SenhaForte@2026xyz";
+    private static final String OUTRO_EMAIL = Contas.emailUnico("outro");
+
+
+    private static final String SENHA = Contas.senhaNova();
     private static final byte[] PDF = "%PDF-1.4 documento de teste".getBytes(StandardCharsets.UTF_8);
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
 
@@ -101,7 +108,7 @@ class CadastroProgressivoTest {
     }
 
     private String adminToken() throws Exception {
-        return token("admin@kixima.co.ao", "Kixima@123");
+        return token(Contas.email(Persona.ADMIN_SISTEMA), Contas.senha());
     }
 
     private ResultActions doc(String token, String tipo, String ficheiro, byte[] conteudo, String mime) throws Exception {
@@ -168,7 +175,7 @@ class CadastroProgressivoTest {
 
         entrar(email, SENHA).andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("EMAIL_NOT_VERIFIED"));
         // Com a senha errada continua a ser «credenciais inválidas» — não se revela o estado da conta.
-        entrar(email, "SenhaErrada@2026xyz").andExpect(status().isUnauthorized());
+        entrar(email, SENHA_ERRADA).andExpect(status().isUnauthorized());
 
         confirmarEmail(email);
         entrar(email, SENHA).andExpect(status().isOk())
@@ -183,19 +190,19 @@ class CadastroProgressivoTest {
     void linkDeConfirmacaoInvalidoEReenvioSemRevelarContas() throws Exception {
         json(post("/api/auth/verify-email"), null, Map.of("token", "isto-nao-e-um-token")).andExpect(status().isBadRequest());
         // Um token de outro tipo (sessão) não serve para confirmar emails.
-        String sessao = token("comprador@petroangola.co.ao", "Kixima@123");
+        String sessao = token(Contas.email(Persona.COMPRADOR), Contas.senha());
         json(post("/api/auth/verify-email"), null, Map.of("token", sessao)).andExpect(status().isBadRequest());
 
         String resposta = json(post("/api/auth/resend-verification"), null, Map.of("email", "ninguem-" + sufixo() + "@x.co.ao"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        String existente = json(post("/api/auth/resend-verification"), null, Map.of("email", "comprador@petroangola.co.ao"))
+        String existente = json(post("/api/auth/resend-verification"), null, Map.of("email", Contas.email(Persona.COMPRADOR)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(existente).isEqualTo(resposta);
     }
 
     @Test
     void contasQueJaExistiamEntramSemConfirmarEmail() throws Exception {
-        entrar("comprador@petroangola.co.ao", "Kixima@123").andExpect(status().isOk()).andExpect(jsonPath("$.user.companyStatus").value("APROVADA"));
+        entrar(Contas.email(Persona.COMPRADOR), Contas.senha()).andExpect(status().isOk()).andExpect(jsonPath("$.user.companyStatus").value("APROVADA"));
     }
 
     // --- portão de aprovação ----------------------------------------------------------------------------------------
@@ -216,7 +223,7 @@ class CadastroProgressivoTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("COMPANY_NOT_APPROVED"));
         }
-        json(post("/api/companies/users"), token, Map.of("name", "Outro", "email", "outro@x.co.ao", "password", SENHA, "role", "COMPRADOR"))
+        json(post("/api/companies/users"), token, Map.of("name", "Outro", "email", OUTRO_EMAIL, "password", SENHA, "role", "COMPRADOR"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("COMPANY_NOT_APPROVED"));
     }
 
@@ -247,7 +254,7 @@ class CadastroProgressivoTest {
 
     @Test
     void soOAdministradorDaEmpresaUsaOCadastro() throws Exception {
-        String comprador = token("comprador@petroangola.co.ao", "Kixima@123");
+        String comprador = token(Contas.email(Persona.COMPRADOR), Contas.senha());
         mockMvc.perform(get("/api/onboarding").header("Authorization", "Bearer " + comprador)).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/onboarding")).andExpect(status().isUnauthorized());
     }
@@ -470,7 +477,7 @@ class CadastroProgressivoTest {
             mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
             mockMvc.perform(get(url).header("Authorization", "Bearer " + token)).andExpect(status().isOk());
             mockMvc.perform(get(url).header("Authorization", "Bearer " + adminToken())).andExpect(status().isOk());
-            mockMvc.perform(get(url).header("Authorization", "Bearer " + token("comprador@petroangola.co.ao", "Kixima@123"))).andExpect(status().isNotFound());
+            mockMvc.perform(get(url).header("Authorization", "Bearer " + token(Contas.email(Persona.COMPRADOR), Contas.senha()))).andExpect(status().isNotFound());
         }
     }
 }

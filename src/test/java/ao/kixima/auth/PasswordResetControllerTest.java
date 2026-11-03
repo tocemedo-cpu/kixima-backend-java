@@ -1,5 +1,8 @@
 package ao.kixima.auth;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.notification.EmailDispatchService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,10 +43,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class PasswordResetControllerTest {
+    private static final String SENHA_NOVA = Contas.senhaNova();
+    private static final String SENHA_OUTRA = Contas.senhaNova();
 
-    private static final String EMAIL = "comprador@petroangola.co.ao";
-    private static final String OLD_PASS = "Kixima@123";
-    private static final String NEW_PASS = "NovaSenha#2026";
+    private static final String NINGUEM_EMAIL = Contas.emailUnico("ninguem");
+
+
+    private static final String EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String OLD_PASS = Contas.senha();
+    private static final String NEW_PASS = SENHA_NOVA;
 
     @Autowired
     private MockMvc mockMvc;
@@ -92,7 +100,7 @@ class PasswordResetControllerTest {
         var known = mockMvc.perform(post("/api/auth/forgot-password").contentType("application/json")
                 .content(objectMapper.writeValueAsString(Map.of("email", EMAIL)))).andReturn().getResponse();
         var unknown = mockMvc.perform(post("/api/auth/forgot-password").contentType("application/json")
-                .content(objectMapper.writeValueAsString(Map.of("email", "ninguem@nada.co.ao")))).andReturn().getResponse();
+                .content(objectMapper.writeValueAsString(Map.of("email", NINGUEM_EMAIL)))).andReturn().getResponse();
         assertThat(known.getStatus()).isEqualTo(200);
         assertThat(unknown.getStatus()).isEqualTo(200);
         assertThat(objectMapper.readTree(known.getContentAsString())).isEqualTo(objectMapper.readTree(unknown.getContentAsString()));
@@ -124,7 +132,7 @@ class PasswordResetControllerTest {
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + oldToken)).andExpect(status().isUnauthorized());
 
         // O mesmo token de recuperação NÃO pode ser reutilizado.
-        assertThat(estado("/api/auth/reset-password", Map.of("token", token, "password", "OutraSenha#99"))).isEqualTo(401);
+        assertThat(estado("/api/auth/reset-password", Map.of("token", token, "password", SENHA_OUTRA))).isEqualTo(401);
     }
 
     @Test
@@ -139,7 +147,7 @@ class PasswordResetControllerTest {
 
     @Test
     void perfilSensivelCompanyAdmin11CaracteresNaoChega422() throws Exception {
-        String adminEmail = "admin@petroangola.co.ao";
+        String adminEmail = Contas.email(Persona.COMPANY_ADMIN);
         estado("/api/auth/forgot-password", Map.of("email", adminEmail));
         String token = tokenFromEmail();
         assertThat(token).isNotBlank();
@@ -150,6 +158,6 @@ class PasswordResetControllerTest {
         assertThat(estado("/api/auth/reset-password", Map.of("token", token, "password", "Curta12345#"))).isEqualTo(422);
 
         // A senha do admin não mudou.
-        assertThat(estado("/api/auth/login", Map.of("email", adminEmail, "password", "Kixima@123"))).isEqualTo(200);
+        assertThat(estado("/api/auth/login", Map.of("email", adminEmail, "password", Contas.senha()))).isEqualTo(200);
     }
 }

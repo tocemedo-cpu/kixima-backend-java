@@ -1,5 +1,8 @@
 package ao.kixima.supplierdev;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -36,10 +39,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class SupplierDevControllerTest {
+    private static final String ANA_EMAIL = Contas.emailUnico("ana");
+    private static final String JOANA_EMAIL = Contas.emailUnico("joana");
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
+
+    private static final String PASSWORD = Contas.senha();
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
 
     @Autowired
     private MockMvc mockMvc;
@@ -88,7 +94,7 @@ class SupplierDevControllerTest {
         mockMvc.perform(post("/api/supplier-development/requests")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "companyName", "Sem Aceite, Lda", "contactName", "Ana", "contactEmail", "ana@semaceite.co.ao"))))
+                                "companyName", "Sem Aceite, Lda", "contactName", "Ana", "contactEmail", ANA_EMAIL))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.details.fieldErrors.length()").value(1))
                 .andExpect(jsonPath("$.error.details.fieldErrors.feeAccepted[0]").value("Confirme que aceita a taxa de acesso cobrada na submissão."));
@@ -96,7 +102,7 @@ class SupplierDevControllerTest {
         mockMvc.perform(post("/api/supplier-development/requests")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "companyName", "Sem Aceite, Lda", "contactName", "Ana", "contactEmail", "ana@semaceite.co.ao", "feeAccepted", "true"))))
+                                "companyName", "Sem Aceite, Lda", "contactName", "Ana", "contactEmail", ANA_EMAIL, "feeAccepted", "true"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.details.fieldErrors.feeAccepted[0]").value("Confirme que aceita a taxa de acesso cobrada na submissão."));
 
@@ -115,7 +121,7 @@ class SupplierDevControllerTest {
         Map<String, Object> demais = new java.util.LinkedHashMap<>();
         demais.put("companyName", "Metalúrgica do Kwanza, Lda");
         demais.put("contactName", "Joana Silva");
-        demais.put("contactEmail", "joana@metalkwanza.co.ao");
+        demais.put("contactEmail", JOANA_EMAIL);
         demais.put("feeAccepted", true);
         demais.put("taxId", "9".repeat(41));
         demais.put("contactPhone", "9".repeat(41));
@@ -181,7 +187,7 @@ class SupplierDevControllerTest {
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "companyName", "Nova Fornecedora, Lda", "contactName", "Joana Silva",
-                                "contactEmail", "joana@novafornecedora.co.ao"))))
+                                "contactEmail", JOANA_EMAIL))))
                 .andExpect(status().isUnprocessableEntity());
 
         // Candidatura pública, sem sessão.
@@ -189,7 +195,7 @@ class SupplierDevControllerTest {
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "companyName", "Nova Fornecedora, Lda", "contactName", "Joana Silva",
-                                "contactEmail", "joana@novafornecedora.co.ao", "track", "BUROCRACIA", "feeAccepted", true))))
+                                "contactEmail", JOANA_EMAIL, "track", "BUROCRACIA", "feeAccepted", true))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("RECEBIDA"))
                 .andExpect(jsonPath("$.reference").value(org.hamcrest.Matchers.matchesPattern("^SD-\\d{4}-\\d{6}$")))
@@ -277,7 +283,7 @@ class SupplierDevControllerTest {
                 "SELECT role, status, email FROM employee_invites WHERE company_id = ?", companyId);
         assertEquals("COMPANY_ADMIN", convite.get("role"));
         assertEquals("PENDENTE", convite.get("status"));
-        assertEquals("joana@novafornecedora.co.ao", convite.get("email"));
+        assertEquals(JOANA_EMAIL, convite.get("email"));
 
         // Uma segunda aprovação já não é possível.
         mockMvc.perform(patch("/api/supplier-development/requests/" + id + "/approve")

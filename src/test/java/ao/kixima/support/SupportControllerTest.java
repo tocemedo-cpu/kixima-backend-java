@@ -1,5 +1,8 @@
 package ao.kixima.support;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -38,10 +41,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class SupportControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FINANCEIRO_EMAIL = "financeiro@petroangola.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
 
     // Assinatura PNG real (8 bytes) + preenchimento — suficiente para passar FileSignature.verificar.
     private static final byte[] PNG_BYTES = {
@@ -94,8 +97,8 @@ class SupportControllerTest {
         JsonNode noAdminList = null;
         for (JsonNode t : adminList) if (ticketId.equals(t.get("id").asText())) noAdminList = t;
         assertTrue(noAdminList != null, "O ticket devia aparecer na listagem admin.");
-        assertEquals("Ana Comprador", noAdminList.get("user").get("name").asText());
-        assertEquals("Petro Angola Operações, Lda", noAdminList.get("company").asText());
+        assertEquals(Contas.nome(Persona.COMPRADOR), noAdminList.get("user").get("name").asText());
+        assertEquals(Contas.nomeDaEmpresa(Persona.COMPRADOR), noAdminList.get("company").asText());
 
         // Um utilizador que não é dono nem gere Suporte não vê o detalhe (404, não 403).
         mockMvc.perform(get("/api/support/tickets/" + ticketId).header("Authorization", "Bearer " + financeiroToken))

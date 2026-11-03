@@ -1,5 +1,8 @@
 package ao.kixima.catalog;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -34,8 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class CatalogControllerTest {
 
-    private static final String EMAIL = "comprador@petroangola.co.ao";
-    private static final String PASSWORD = "Kixima@123";
+    private static final String EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String PASSWORD = Contas.senha();
 
     @Autowired
     private MockMvc mockMvc;
@@ -108,7 +111,7 @@ class CatalogControllerTest {
 
         var res = mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("email", "fornecedor@kianda.co.ao", "password", PASSWORD))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", Contas.email(Persona.FORNECEDOR), "password", PASSWORD))))
                 .andExpect(status().isOk())
                 .andReturn();
         String fornecedorToken = objectMapper.readTree(res.getResponse().getContentAsString()).get("token").asText();
@@ -132,7 +135,7 @@ class CatalogControllerTest {
         String compradorToken = login();
         var res = mockMvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(Map.of("email", "fornecedor@kianda.co.ao", "password", PASSWORD))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", Contas.email(Persona.FORNECEDOR), "password", PASSWORD))))
                 .andExpect(status().isOk())
                 .andReturn();
         String fornecedorToken = objectMapper.readTree(res.getResponse().getContentAsString()).get("token").asText();

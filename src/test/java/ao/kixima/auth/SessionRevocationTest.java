@@ -1,5 +1,7 @@
 package ao.kixima.auth;
 
+import ao.kixima.testsupport.Contas;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -33,12 +35,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @ActiveProfiles("test")
 @Transactional
 class SessionRevocationTest {
+    private static final String SENHA_NOVA = Contas.senhaNova();
 
-    private static final String EMAIL = "sessao.teste@terceira.co.ao";
-    private static final String PW = "Kixima@123";
+    private static final String SESSAO_TESTE_EMAIL = Contas.emailUnico("sessao.teste");
+
+
+    private static final String EMAIL = SESSAO_TESTE_EMAIL;
+    private static final String PW = Contas.senha();
     // COMPANY_ADMIN é perfil sensível — mínimo de 12 caracteres (ver
     // PasswordPolicy), também aplicado na troca de senha.
-    private static final String NEW_PW = "NovaSenha@12";
+    private static final String NEW_PW = SENHA_NOVA;
 
     @Autowired
     private MockMvc mockMvc;

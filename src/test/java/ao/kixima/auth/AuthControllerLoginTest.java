@@ -1,5 +1,8 @@
 package ao.kixima.auth;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,12 +22,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Teste de paridade de contrato (plano, secção 4): usa a MESMA conta de
- * teste que backend/tests/helpers.js semeia para o Node
- * (comprador@petroangola.co.ao / Kixima@123, na mesma base Postgres local
- * partilhada), confirmando login end-to-end pelo backend Java. `@Transactional`
- * na classe garante que nada fica persistido depois do teste — a conta
- * partilhada com o Node sai exactamente como entrou.
+ * Teste de paridade de contrato (plano, secção 4): confirma o login end-to-end pelo backend Java com um utilizador
+ * temporário criado durante a execução (ver {@link ao.kixima.testsupport.Contas}: email e senha aleatórios, apagados no
+ * fim — nenhuma conta está escrita no código). `@Transactional` na classe garante que nada do que o teste altera fica
+ * persistido.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -32,8 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class AuthControllerLoginTest {
 
-    private static final String EMAIL = "comprador@petroangola.co.ao";
-    private static final String PASSWORD = "Kixima@123";
+    private static final String EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String PASSWORD = Contas.senha();
 
     @Autowired
     private MockMvc mockMvc;

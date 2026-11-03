@@ -1,5 +1,8 @@
 package ao.kixima;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @ActiveProfiles("test")
 class SemSessaoSmokeTest {
 
-    private static final String PASSWORD = "Kixima@123";
+    private static final String PASSWORD = Contas.senha();
 
     @Autowired
     private MockMvc mockMvc;
@@ -54,14 +57,17 @@ class SemSessaoSmokeTest {
 
     @Test
     void leiturasDeTodasAsPersonasNuncaDao5xxForaDeUmaTransacaoDeTeste() throws Exception {
-        String comprador = login("comprador@petroangola.co.ao");
-        String companyAdmin = login("admin@petroangola.co.ao");
-        String financeiro = login("financeiro@petroangola.co.ao");
-        String fornecedor = login("fornecedor@kianda.co.ao");
-        String admin = login("admin@kixima.co.ao");
-        String compradora = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-CLI-0001'", String.class);
-        String fornecedora = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = 'AO-FOR-0001'", String.class);
-        String produto = jdbcTemplate.queryForObject("SELECT id FROM products WHERE supplier_id = ? ORDER BY name LIMIT 1", String.class, fornecedora);
+        String comprador = login(Contas.email(Persona.COMPRADOR));
+        String companyAdmin = login(Contas.email(Persona.COMPANY_ADMIN));
+        String financeiro = login(Contas.email(Persona.FINANCEIRO));
+        String fornecedor = login(Contas.email(Persona.FORNECEDOR));
+        String admin = login(Contas.email(Persona.ADMIN_SISTEMA));
+        // As empresas vêm dos próprios utilizadores temporários: funciona com as empresas de dados de exemplo ou, numa base
+        // sem elas, com as empresas temporárias que a Contas cria. Sem produtos, usa-se um id inexistente (404, nunca 5xx).
+        String compradora = jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = ?", String.class, Contas.email(Persona.COMPRADOR));
+        String fornecedora = jdbcTemplate.queryForObject("SELECT company_id FROM users WHERE email = ?", String.class, Contas.email(Persona.FORNECEDOR));
+        String produto = jdbcTemplate.queryForList("SELECT id FROM products WHERE supplier_id = ? ORDER BY name LIMIT 1", String.class, fornecedora)
+                .stream().findFirst().orElse("produto-inexistente");
         List<String> pos = jdbcTemplate.queryForList("SELECT id FROM purchase_orders WHERE buyer_company_id = ? ORDER BY created_at LIMIT 1", String.class, compradora);
         List<String> faturas = jdbcTemplate.queryForList("SELECT id FROM invoices ORDER BY issued_at LIMIT 1", String.class);
         List<String> contratos = jdbcTemplate.queryForList("SELECT id FROM contracts ORDER BY created_at LIMIT 1", String.class);

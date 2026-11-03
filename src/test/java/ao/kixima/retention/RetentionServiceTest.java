@@ -1,5 +1,8 @@
 package ao.kixima.retention;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import ao.kixima.retention.dto.RetentionCleanupResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +37,7 @@ class RetentionServiceTest {
 
     @Test
     void limpezaApagaSoOQueEstaForaDoPrazo() throws Exception {
-        String compradorId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, "comprador@petroangola.co.ao");
+        String compradorId = jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", String.class, Contas.email(Persona.COMPRADOR));
         String petroangolaId = jdbcTemplate.queryForObject("SELECT id FROM companies WHERE tax_id = ?", String.class, "AO-CLI-0001");
 
         // Notificação lida há 200 dias (fora do prazo de 180) — apaga.

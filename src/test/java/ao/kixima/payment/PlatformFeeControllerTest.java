@@ -1,5 +1,8 @@
 package ao.kixima.payment;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -37,10 +40,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class PlatformFeeControllerTest {
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String FINANCEIRO_EMAIL = "financeiro@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
+    private static final String PASSWORD = Contas.senha();
+    private static final String FINANCEIRO_EMAIL = Contas.email(Persona.FINANCEIRO);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
 
     @Autowired
     private MockMvc mockMvc;

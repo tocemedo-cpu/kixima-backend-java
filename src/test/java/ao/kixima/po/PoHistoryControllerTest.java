@@ -1,5 +1,8 @@
 package ao.kixima.po;
 
+import ao.kixima.testsupport.Contas;
+import ao.kixima.testsupport.Contas.Persona;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -31,13 +34,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class PoHistoryControllerTest {
+    private static final String ADMIN_ALHEIA_HIST_EMAIL = Contas.emailUnico("admin.alheia.hist");
 
-    private static final String PASSWORD = "Kixima@123";
-    private static final String COMPANY_ADMIN_EMAIL = "admin@petroangola.co.ao";
-    private static final String COMPRADOR_EMAIL = "comprador@petroangola.co.ao";
-    private static final String FORNECEDOR_EMAIL = "fornecedor@kianda.co.ao";
-    private static final String ADMIN_SISTEMA_EMAIL = "admin@kixima.co.ao";
-    private static final String OUTSIDER_EMAIL = "admin.alheia.hist@alheia-hist.co.ao";
+
+    private static final String PASSWORD = Contas.senha();
+    private static final String COMPANY_ADMIN_EMAIL = Contas.email(Persona.COMPANY_ADMIN);
+    private static final String COMPRADOR_EMAIL = Contas.email(Persona.COMPRADOR);
+    private static final String FORNECEDOR_EMAIL = Contas.email(Persona.FORNECEDOR);
+    private static final String ADMIN_SISTEMA_EMAIL = Contas.email(Persona.ADMIN_SISTEMA);
+    private static final String OUTSIDER_EMAIL = ADMIN_ALHEIA_HIST_EMAIL;
 
     @Autowired
     private MockMvc mockMvc;
