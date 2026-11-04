@@ -88,13 +88,25 @@ public class JwtService {
                 .compact();
     }
 
-    /** Espelha jwt.verify(token, secret, {algorithms:['HS256']}) — lança UnauthorizedException com a mensagem genérica. */
+    /**
+     * Verificação de SESSÃO (filtro de autenticação e WebSocket) — espelha jwt.verify(token, secret, {algorithms:['HS256']}) e
+     * lança UnauthorizedException com a mensagem genérica.
+     *
+     * <p>Só aceita o token de sessão. Os tokens auxiliares (desafio de 2FA, recuperação de senha, confirmação de email e
+     * convite) são assinados com a MESMA chave e também têm {@code sub}/{@code tv}; o que os distingue é o claim
+     * {@code t}, que o token de sessão nunca tem. Sem este controlo, o desafio que o login devolve antes do código de 2FA
+     * valia como sessão completa (contornava o 2FA). Cada token auxiliar lê-se com {@link #verifyRaw(String)} no seu
+     * passo próprio.
+     */
     public Claims verify(String token) {
+        Claims claims;
         try {
-            return verifyRaw(token);
+            claims = verifyRaw(token);
         } catch (JwtException | IllegalArgumentException e) {
             throw new UnauthorizedException("Token inválido ou expirado.");
         }
+        if (claims.get("t") != null) throw new UnauthorizedException("Token inválido ou expirado.");
+        return claims;
     }
 
     /**
