@@ -1,10 +1,15 @@
 # Perfil de produção — NENHUM valor por omissão para segredos. Falha no
-# arranque se DATABASE_URL_JDBC/JWT_SECRET não estiverem definidos (ver
+# arranque se DATABASE_PASSWORD/JWT_SECRET não estiverem definidos (ver
 # ProducaoStartupGuard).
 spring:
   datasource:
-    url: ${DATABASE_URL_JDBC}
-    username: ${DATABASE_USER}
+    # A base de produção: serviço Docker `db_kixima`, base `kixima`, utilizador `kixima`. URL e utilizador NÃO são segredos,
+    # por isso trazem esse valor por omissão (e DATABASE_URL_JDBC / DATABASE_USER substituem-no, p. ex. noutro host ou
+    # base). A SENHA é um segredo: só vem do ambiente (DATABASE_PASSWORD), sem valor por omissão — sem ela o arranque
+    # falha com «Could not resolve placeholder 'DATABASE_PASSWORD'». A configuração local vive em application-dev.yml /
+    # application-test.yml (localhost) e nunca toca nesta.
+    url: ${DATABASE_URL_JDBC:jdbc:postgresql://db_kixima:5432/kixima}
+    username: ${DATABASE_USER:kixima}
     password: ${DATABASE_PASSWORD}
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:5}

@@ -107,7 +107,7 @@ completa — está tudo documentado inline):
 
 | Variável | Para quê |
 |---|---|
-| `DATABASE_URL_JDBC` / `DATABASE_USER` / `DATABASE_PASSWORD` | Ligação à base de dados. **A senha não tem valor por omissão** (repositório público): defina-a sempre; os perfis `dev` e `test` trazem a da base local descartável |
+| `DATABASE_URL_JDBC` / `DATABASE_USER` / `DATABASE_PASSWORD` | Ligação à base de dados. Em `prod` o URL e o utilizador têm por omissão a base de produção (`jdbc:postgresql://db_kixima:5432/kixima`, utilizador `kixima`) e as variáveis substituem-nos; **a senha não tem valor por omissão** (repositório público): defina-a sempre. Os perfis `dev` e `test` usam `localhost` e trazem a senha da base local descartável |
 | `JWT_SECRET` | Assinatura de sessão. **Sem valor por omissão**: obrigatória em produção (mín. 32 caracteres); em `dev` gera-se um aleatório a cada arranque (as sessões não sobrevivem a um reinício — exporte `JWT_SECRET` para as manter) |
 | `PORT` | Porta HTTP (omissão 4001) |
 | `STORAGE_PROVIDER` (+ `STORAGE_*`) | `local` (disco, dev) ou `s3` (produção) |
