@@ -1,8 +1,30 @@
-# Stack Docker Swarm de referência: PostgreSQL + backend. Uso:
+# Stack Docker Swarm de referência: PostgreSQL + backend (perfil de PRODUÇÃO). Uso:
 #
-#   export DATABASE_PASSWORD='<uma palavra-passe forte>'   # nunca a deixe escrita neste ficheiro
-#   export BACKEND_IMAGE=<a sua imagem do backend>
-#   docker stack deploy -c docker-stack.swarm.yml kixima
+# 1) Segredos (uma vez; vivem no Swarm, nunca neste ficheiro nem em variáveis do serviço). Leia a senha sem a deixar no
+#    histórico da shell, e use a senha ACTUAL do utilizador `kixima` da base (ver «Senha da base» mais abaixo):
+#      read -rs -p 'senha da base: ' P && printf '%s' "$P" | docker secret create kixima_database_password - ; unset P
+#      openssl rand -base64 48 | tr -d '\n' | docker secret create kixima_jwt_secret -
+#      printf '%s' '<chave de acesso S3>' | docker secret create kixima_storage_access_key -
+#      printf '%s' '<chave secreta S3>'   | docker secret create kixima_storage_secret_key -
+#    Os secrets são imutáveis: para rodar um, crie `<nome>_v2`, mude o `source:` abaixo e volte a fazer o deploy.
+#
+# 2) Variáveis NÃO secretas e deploy:
+#      export BACKEND_IMAGE=<a sua imagem do backend>
+#      export APP_URL=https://<o seu domínio>
+#      export STORAGE_BUCKET=<bucket> STORAGE_ENDPOINT=<endpoint S3> STORAGE_REGION=<região>
+#      docker stack deploy -c docker-stack.swarm.yml kixima
+#
+# O backend lê os secrets por `SPRING_CONFIG_IMPORT=configtree:/run/secrets/`: cada ficheiro montado em /run/secrets
+# passa a ser uma propriedade com o nome do ficheiro (DATABASE_PASSWORD, JWT_SECRET, STORAGE_*), que é o que o
+# application-prod.yml espera. Nada disto aparece em `docker service inspect` (só os NOMES dos secrets).
+#
+# Variáveis que o perfil `prod` exige (ProducaoStartupGuard): JWT_SECRET (>= 32 caracteres), STORAGE_PROVIDER=s3 com
+# STORAGE_BUCKET/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY, e APP_URL ou CORS_ORIGINS. Para o registo enviar o email de
+# confirmação defina também EMAIL_PROVIDER (smtp ou brevo) e as credenciais, estas como secrets pelo mesmo mecanismo.
+#
+# Senha da base: o Postgres só aplica a senha quando a pasta de dados está VAZIA (primeiro arranque). Numa base
+# existente o secret tem de conter a senha que o utilizador `kixima` já tem; senão o backend falha com
+# «password authentication failed». Para a mudar: ALTER USER kixima PASSWORD '...' (na base) e crie o secret novo.
 #
 # ONDE O POSTGRES GUARDA OS DADOS (leia isto antes de mudar o volume)
 # --------------------------------------------------------------------
@@ -25,11 +47,14 @@ services:
   db_kixima:
     image: postgres:17.11
     environment:
-      POSTGRES_USER: ${DATABASE_USER:-kixima}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?defina DATABASE_PASSWORD antes do deploy}
-      POSTGRES_DB: ${POSTGRES_DB:-kixima}
+      POSTGRES_USER: kixima
+      # A senha vem do secret (convenção `_FILE` da imagem oficial): não fica na especificação do serviço.
+      POSTGRES_PASSWORD_FILE: /run/secrets/kixima_database_password
+      POSTGRES_DB: kixima
       # É o valor por omissão; fica escrito para que ninguém o altere sem perceber o que muda.
       PGDATA: /var/lib/postgresql/data
+    secrets:
+      - kixima_database_password
     volumes:
       - kixima_pgdata:/var/lib/postgresql/data
       # Alternativa: uma pasta do host (tem de existir ANTES do deploy: mkdir -p /opt/kixima/postgres).
@@ -51,18 +76,46 @@ services:
     depends_on:
       - db_kixima
     environment:
-      DATABASE_URL_JDBC: jdbc:postgresql://db_kixima:5432/${POSTGRES_DB:-kixima}
-      DATABASE_USER: ${DATABASE_USER:-kixima}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?defina DATABASE_PASSWORD antes do deploy}
-      # Base vazia: o Flyway cria o schema (V1__baseline.sql). Numa base que já tem o schema só a marca como versão 1.
+      SPRING_PROFILES_ACTIVE: prod
+      # Lê os secrets montados em /run/secrets como propriedades (DATABASE_PASSWORD, JWT_SECRET, STORAGE_*).
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      # A base de produção: serviço `db_kixima`, base `kixima`, utilizador `kixima` (a senha vem do secret).
+      DATABASE_URL_JDBC: jdbc:postgresql://db_kixima:5432/kixima
+      DATABASE_USER: kixima
+      # Base vazia: o Flyway cria o schema (V1__baseline.sql). Numa base que já tem o schema só a marca como versão 1
+      # e aplica a V2. Não apaga dados. Para aplicar as migrações à mão: FLYWAY_ENABLED=false.
       FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
       PORT: "4001"
-      # Em produção acrescente SPRING_PROFILES_ACTIVE=prod e as variáveis que o ProducaoStartupGuard exige
-      # (JWT_SECRET forte, APP_URL ou CORS_ORIGINS, STORAGE_PROVIDER=s3 + STORAGE_*). Ver README.md.
+      # Exigido pelo perfil prod: o endereço público do site (links de email e CORS).
+      APP_URL: ${APP_URL:?defina APP_URL antes do deploy}
+      # Armazenamento S3 (obrigatório em produção); as chaves vêm dos secrets.
+      STORAGE_PROVIDER: s3
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?defina STORAGE_BUCKET antes do deploy}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_REGION: ${STORAGE_REGION:-}
+      # Email (para o registo enviar a confirmação) — acrescente quando souber o provider, p. ex.:
+      #   EMAIL_PROVIDER: smtp  (ou brevo)   EMAIL_FROM: ...   e as credenciais como secrets (SMTP_PASSWORD / BREVO_API_KEY).
+    secrets:
+      - { source: kixima_database_password, target: DATABASE_PASSWORD }
+      - { source: kixima_jwt_secret, target: JWT_SECRET }
+      - { source: kixima_storage_access_key, target: STORAGE_ACCESS_KEY }
+      - { source: kixima_storage_secret_key, target: STORAGE_SECRET_KEY }
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
+        delay: 10s
 
 volumes:
   kixima_pgdata:
+
+# Criados antes do deploy (ver o início do ficheiro); o Swarm só referencia, nunca cria nem mostra o valor.
+secrets:
+  kixima_database_password:
+    external: true
+  kixima_jwt_secret:
+    external: true
+  kixima_storage_access_key:
+    external: true
+  kixima_storage_secret_key:
+    external: true
