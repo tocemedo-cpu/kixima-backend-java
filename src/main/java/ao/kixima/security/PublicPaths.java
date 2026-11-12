@@ -80,6 +80,8 @@ public class PublicPaths {
         // Montra pública do catálogo (só leitura): visitantes sem conta exploram produtos, serviços e fornecedoras.
         // Os endpoints devolvem um subconjunto seguro de campos — ver PublicCatalogController.
         adicionar("GET", "/api/public/catalog/**");
+        // Banners da homepage (só os activos, com imagem) — só leitura. A gestão é /api/admin/banners, com sessão.
+        adicionar("GET", "/api/public/banners");
         // Tabela de planos e preços — pública (planosRoutes.js).
         adicionar("GET", "/api/planos");
         // Callback dos canais de pagamento automático — quem chama é o gateway, não um utilizador (webhookPagamentoRoutes.js).

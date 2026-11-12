@@ -101,13 +101,14 @@ class FlywayBaselineTest {
     void baseVaziaRecebeOSchemaCompleto() throws Exception {
         comBaseTemporaria(base -> {
             var resultado = flywayComAConfigDaAplicacao(base).migrate();
-            assertThat(resultado.migrationsExecuted).as("V1 (schema completo) e V2 (cadastro progressivo)").isEqualTo(2);
+            assertThat(resultado.migrationsExecuted).as("V1 (schema completo), V2 (cadastro progressivo) e V3 (banners)").isEqualTo(3);
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD)) {
                 // addon_cobrancas é a tabela que o Hibernate reporta em falta numa base vazia.
                 assertThat(existe(c, "addon_cobrancas")).isTrue();
                 assertThat(existe(c, "users")).isTrue();
                 assertThat(temColuna(c, "users", "email_verified_at")).isTrue();
                 assertThat(temColuna(c, "companies", "onboarding_draft")).isTrue();
+                assertThat(existe(c, "banners")).as("V3: banners da homepage").isTrue();
             } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }
@@ -132,10 +133,10 @@ class FlywayBaselineTest {
             Flyway flyway = flywayComAConfigDaAplicacao(base);
             var resultado = flyway.migrate(); // com baseline-version 0 isto falhava: "relation ... already exists"
 
-            // A V1 não se repete (a base marca-se como V1); só as migrações seguintes correm — hoje a V2.
-            assertThat(resultado.migrationsExecuted).as("só a V2 corre sobre um schema existente; a V1 não é reexecutada").isEqualTo(1);
+            // A V1 não se repete (a base marca-se como V1); só as migrações seguintes correm — hoje a V2 e a V3.
+            assertThat(resultado.migrationsExecuted).as("só a V2 e a V3 correm sobre um schema existente; a V1 não é reexecutada").isEqualTo(2);
             MigrationInfo actual = flyway.info().current();
-            assertThat(actual.getVersion().getVersion()).isEqualTo("2");
+            assertThat(actual.getVersion().getVersion()).isEqualTo("3");
             assertThat(java.util.Arrays.stream(flyway.info().applied()).filter(m -> "1".equals(m.getVersion().getVersion())).findFirst().orElseThrow().getType().name())
                     .as("a V1 fica apenas como linha de base").isEqualTo("BASELINE");
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD); Statement st = c.createStatement();

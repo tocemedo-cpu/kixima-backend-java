@@ -1,5 +1,6 @@
 package ao.kixima.storage;
 
+import ao.kixima.banner.BannerRepository;
 import ao.kixima.catalog.ProductDocumentRepository;
 import ao.kixima.catalog.ProductImageRepository;
 import ao.kixima.catalog.ProductRepository;
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Service;
  * não é servido a ninguém que não seja Admin do Sistema.
  *
  * ÂMBITO: público (imagem de capa/galeria/documento de produto, avatar,
- * logótipo de empresa) + Admin do Sistema + anexos do Chat de Suporte +
+ * logótipo de empresa, imagem de banner da homepage) + Admin do Sistema + anexos do Chat de Suporte +
  * os documentos de credenciamento da PRÓPRIA empresa (certidão, alvará,
  * licença ANPG, apólice — enviados no cadastro por etapas), que só a
  * empresa que os enviou e a KIXIMA abrem. NÃO PORTADO — fica a negar por
@@ -46,12 +47,13 @@ public class UploadAccessService {
     private final CompanyRepository companyRepository;
     private final CompanyDocumentRepository companyDocumentRepository;
     private final SupplierToKiximaPolicyRepository supplierPolicyRepository;
+    private final BannerRepository bannerRepository;
 
     public UploadAccessService(ProductRepository productRepository, ProductImageRepository productImageRepository,
                                 ProductDocumentRepository productDocumentRepository, UserRepository userRepository,
                                 SupportMessageRepository supportMessageRepository, SupportChatService supportChatService,
                                 CompanyRepository companyRepository, CompanyDocumentRepository companyDocumentRepository,
-                                SupplierToKiximaPolicyRepository supplierPolicyRepository) {
+                                SupplierToKiximaPolicyRepository supplierPolicyRepository, BannerRepository bannerRepository) {
         this.productRepository = productRepository;
         this.productImageRepository = productImageRepository;
         this.productDocumentRepository = productDocumentRepository;
@@ -61,6 +63,7 @@ public class UploadAccessService {
         this.companyRepository = companyRepository;
         this.companyDocumentRepository = companyDocumentRepository;
         this.supplierPolicyRepository = supplierPolicyRepository;
+        this.bannerRepository = bannerRepository;
     }
 
     private boolean ehPublico(String url) {
@@ -68,7 +71,9 @@ public class UploadAccessService {
                 || productImageRepository.existsByUrl(url)
                 || productDocumentRepository.existsByFileUrl(url)
                 || userRepository.existsByAvatarUrl(url)
-                || companyRepository.existsByLogoUrl(url);
+                || companyRepository.existsByLogoUrl(url)
+                // Imagem de um banner da homepage: é pública, mas só a de um banner que existe (um ficheiro órfão continua negado).
+                || bannerRepository.existsByImagem(url);
     }
 
     private boolean ehDaEmpresa(String url, String companyId) {
