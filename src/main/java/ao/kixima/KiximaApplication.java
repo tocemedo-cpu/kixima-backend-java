@@ -2,6 +2,7 @@ package ao.kixima;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -14,7 +15,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * application.yml); quem o aplica é o Flyway, opt-in via
  * {@code FLYWAY_ENABLED=true} — ver docs/provisionamento-postgresql.md.
  */
-@SpringBootApplication
+// A autenticação é por JWT (AuthenticationFilter) e httpBasic/formLogin estão desligados (SecurityConfig): não há
+// utilizadores em memória. Sem esta exclusão o Spring Security cria o utilizador "user" e ESCREVE a sua senha gerada no
+// log a cada arranque («Using generated security password») — uma credencial no log que a aplicação nunca usa.
+@SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @EnableScheduling
 public class KiximaApplication {
     public static void main(String[] args) {
