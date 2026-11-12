@@ -71,7 +71,7 @@ de referência adicional, em formato Prisma. Não é actualizada automaticamente
 
 ## A correr localmente
 
-Precisas de um PostgreSQL 16 local (ou remoto) com a mesma estrutura de
+Precisas de um PostgreSQL 17 local (ou remoto) com a mesma estrutura de
 tabelas do KIXIMA. Sem essa base, a aplicação arranca mas todas as operações
 que tocam na base de dados falham.
 

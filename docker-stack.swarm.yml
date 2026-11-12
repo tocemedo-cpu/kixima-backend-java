@@ -86,6 +86,10 @@ services:
       # e aplica a V2. Não apaga dados. Para aplicar as migrações à mão: FLYWAY_ENABLED=false.
       FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
       PORT: "4001"
+      # Atrás do Nginx (mesma origem, ver o front: deploy/nginx/): sem isto o backend vê sempre o IP do proxy e a auditoria
+      # (audit_logs.detail.ip) grava-o em vez do IP do cliente. Com `native` o Tomcat lê X-Forwarded-For/Proto dos proxies
+      # internos (rede da stack). Testado: sem a variável grava o IP do proxy; com ela, o do cliente.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
       # Exigido pelo perfil prod: o endereço público do site (links de email e CORS).
       APP_URL: ${APP_URL:?defina APP_URL antes do deploy}
       # Armazenamento S3 (obrigatório em produção); as chaves vêm dos secrets.

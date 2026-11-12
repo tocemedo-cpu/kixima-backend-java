@@ -32,8 +32,19 @@ COPY src src
 RUN mvn -B -q package -DskipTests
 
 # --- runtime ---
-FROM eclipse-temurin:21-jre-alpine AS runtime
+# Alpine fixado (3.24): a etiqueta `21-jre-alpine` flutua com cada nova versão do Alpine, e o nome do pacote do cliente PostgreSQL
+# (abaixo) depende da versão do Alpine. Ao subir de versão, confirme que `postgresql17-client` (ou o major da base) existe nela.
+FROM eclipse-temurin:21-jre-alpine-3.24 AS runtime
 WORKDIR /app
+
+# Cliente PostgreSQL 17 (pg_dump/pg_restore/psql) para a cópia de segurança da própria aplicação (BackupService corre `pg_dump`
+# pelo PATH). Tem de ser o MESMO major do servidor da stack (postgres:17.11): o pg_dump recusa-se a copiar um servidor mais
+# recente do que ele. Só o subpacote `-client` (não o servidor, nem o `postgresql-client` genérico, que instalaria outro major).
+# O `pg_dump` fica em /usr/bin por um trigger do pacote postgresql-common. A verificação falha o BUILD se o major não for o 17;
+# a versão exacta instalada fica escrita no log do build. Sem credenciais: nada de ARG/ENV de senhas aqui.
+RUN apk add --no-cache postgresql17-client \
+    && pg_dump --version \
+    && pg_dump --version | grep -q 'pg_dump (PostgreSQL) 17\.'
 
 # Utilizador não-root — o processo nunca precisa de privilégios de root.
 RUN addgroup -S kixima && adduser -S kixima -G kixima

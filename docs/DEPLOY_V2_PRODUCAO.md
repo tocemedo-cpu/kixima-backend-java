@@ -320,7 +320,7 @@ docker exec -i <ID> psql -U <utilizador> -d kixima -Atc \
 | coluna `1` e o erro persiste | o serviço usa outra base ou outro servidor | Confirmar `DATABASE_URL_JDBC` (host `db_kixima`, base `kixima`) |
 
 **Correcção no código** (a que acompanha este guia): o Flyway passa a vir **ligado por omissão** no perfil `prod` e no
-perfil `test` (`application-prod.yml`, `application-test.yml`). A validação do Hibernate mantém-se. Efeitos:
+perfil `test` (`application-prod.yml` e `application-test.yml`, este em `src/test/resources`, fora do JAR). A validação do Hibernate mantém-se. Efeitos:
 
 - `mvn test` aplica sozinho à `kixima_test` as migrações em falta (a V2); já não é preciso `psql -f`. O utilizador da base
   de testes tem de ser dono das tabelas.
