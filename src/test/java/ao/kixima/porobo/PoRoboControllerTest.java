@@ -32,9 +32,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Teste de paridade de contrato para poRoboRoutes.js: só o Company Admin
- * configura regras, e nada se escreve sem o add-on ATIVO — nem indo direto
- * ao endpoint.
+ * Teste de paridade de contrato para poRoboRoutes.js: o Company Admin
+ * (e, desde o PO Robot de propostas, o COMPRADOR — ver PoRoboPropostasControllerTest)
+ * configura regras, o Fornecedor não, e nada se escreve sem o add-on ATIVO —
+ * nem indo direto ao endpoint.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

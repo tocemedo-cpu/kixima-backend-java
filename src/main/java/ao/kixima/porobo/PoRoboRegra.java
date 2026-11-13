@@ -66,6 +66,19 @@ public class PoRoboRegra extends AbstractPersistableEntity<String> {
     @Column(name = "proxima_execucao_em", nullable = false)
     private Instant proximaExecucaoEm;
 
+    /** Parâmetros opcionais da regra (V4). Ficam guardados e entram na previsão; sem stock real do comprador não mudam a quantidade. */
+    @Column(name = "stock_minimo")
+    private Integer stockMinimo;
+
+    @Column(name = "stock_seguranca")
+    private Integer stockSeguranca;
+
+    @Column(name = "prazo_entrega_dias")
+    private Integer prazoEntregaDias;
+
+    @Column(name = "ultima_execucao_em")
+    private Instant ultimaExecucaoEm;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -158,6 +171,34 @@ public class PoRoboRegra extends AbstractPersistableEntity<String> {
 
     public Instant getProximaExecucaoEm() {
         return proximaExecucaoEm;
+    }
+
+    public Integer getStockMinimo() {
+        return stockMinimo;
+    }
+
+    public void setStockMinimo(Integer stockMinimo) {
+        this.stockMinimo = stockMinimo;
+    }
+
+    public Integer getStockSeguranca() {
+        return stockSeguranca;
+    }
+
+    public void setStockSeguranca(Integer stockSeguranca) {
+        this.stockSeguranca = stockSeguranca;
+    }
+
+    public Integer getPrazoEntregaDias() {
+        return prazoEntregaDias;
+    }
+
+    public void setPrazoEntregaDias(Integer prazoEntregaDias) {
+        this.prazoEntregaDias = prazoEntregaDias;
+    }
+
+    public Instant getUltimaExecucaoEm() {
+        return ultimaExecucaoEm;
     }
 
     public Instant getCreatedAt() {

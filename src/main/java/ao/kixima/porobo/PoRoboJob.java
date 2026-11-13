@@ -9,11 +9,13 @@ import org.springframework.stereotype.Component;
 
 /**
  * Espelha backend/src/jobs/poRoboJob.js — corre diariamente às 06:00 e
- * prepara as POs cuja regra chegou à vez; nunca aprova nem paga.
+ * prepara PROPOSTAS de compra para as regras cuja vez chegou (uma execução por
+ * empresa); nunca cria POs, nunca aprova nem paga — a PO só nasce quando uma
+ * pessoa submete a proposta.
  *
  * DESLIGADO POR OMISSÃO ({@code kixima.jobs.po-robot.enabled: false}) — aqui
  * a regra do plano é mesmo crítica: dois backends a correr o ciclo criariam
- * POs em duplicado (a reserva atómica só protege corridas que vêem a MESMA
+ * propostas em duplicado (a reserva atómica só protege corridas que vêem a MESMA
  * base, o que os dois vêem — mas não vale a pena confiar nisso enquanto o
  * Node continuar dono do job).
  */
@@ -36,7 +38,7 @@ public class PoRoboJob {
         try {
             PoRoboService.CicloResultado resultado = poRoboService.executarCiclo();
             if (resultado.total() > 0) {
-                log.info("PO Robot: ciclo concluído — total={} criadas={} falhas={}",
+                log.info("PO Robot: ciclo concluído — regras={} propostas criadas={} falhas={}",
                         resultado.total(), resultado.criadas(), resultado.falhas().size());
             }
         } catch (Exception e) {

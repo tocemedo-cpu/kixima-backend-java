@@ -10,8 +10,11 @@ import java.util.List;
 
 public interface PoRoboRegraRepository extends JpaRepository<PoRoboRegra, String> {
 
-    @Query("SELECT r FROM PoRoboRegra r JOIN FETCH r.product WHERE r.companyId = :companyId ORDER BY r.createdAt DESC")
+    @Query("SELECT r FROM PoRoboRegra r JOIN FETCH r.product p JOIN FETCH p.supplier WHERE r.companyId = :companyId ORDER BY r.createdAt DESC")
     List<PoRoboRegra> findByCompanyIdComProduto(@Param("companyId") String companyId);
+
+    /** Uma empresa só tem uma regra por produto (409 ao duplicar) — duas regras gerariam propostas em duplicado. */
+    boolean existsByCompanyIdAndProductId(String companyId, String productId);
 
     /** Regras ativas cuja vez chegou — o `findMany` de poRoboService.executarCiclo. */
     List<PoRoboRegra> findByAtivoTrueAndProximaExecucaoEmLessThanEqual(Instant agora);
@@ -31,4 +34,9 @@ public interface PoRoboRegraRepository extends JpaRepository<PoRoboRegra, String
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE PoRoboRegra r SET r.proximaExecucaoEm = :proxima WHERE r.id = :id")
     int definirProximaExecucao(@Param("id") String id, @Param("proxima") Instant proxima);
+
+    /** Regista que a regra foi avaliada agora e quando é a próxima vez (só depois de a proposta/previsão estarem gravadas). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE PoRoboRegra r SET r.ultimaExecucaoEm = :agora, r.proximaExecucaoEm = :proxima WHERE r.id = :id")
+    int concluirExecucao(@Param("id") String id, @Param("agora") Instant agora, @Param("proxima") Instant proxima);
 }
