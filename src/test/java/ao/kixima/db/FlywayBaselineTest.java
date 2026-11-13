@@ -101,7 +101,7 @@ class FlywayBaselineTest {
     void baseVaziaRecebeOSchemaCompleto() throws Exception {
         comBaseTemporaria(base -> {
             var resultado = flywayComAConfigDaAplicacao(base).migrate();
-            assertThat(resultado.migrationsExecuted).as("V1 (schema completo), V2 (cadastro progressivo) e V3 (banners)").isEqualTo(3);
+            assertThat(resultado.migrationsExecuted).as("V1 (schema completo), V2 (cadastro progressivo), V3 (banners) e V4 (PO Robot: propostas)").isEqualTo(4);
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD)) {
                 // addon_cobrancas é a tabela que o Hibernate reporta em falta numa base vazia.
                 assertThat(existe(c, "addon_cobrancas")).isTrue();
@@ -109,6 +109,13 @@ class FlywayBaselineTest {
                 assertThat(temColuna(c, "users", "email_verified_at")).isTrue();
                 assertThat(temColuna(c, "companies", "onboarding_draft")).isTrue();
                 assertThat(existe(c, "banners")).as("V3: banners da homepage").isTrue();
+                assertThat(existe(c, "po_robo_propostas")).as("V4: propostas do PO Robot").isTrue();
+                assertThat(existe(c, "po_robo_previsoes")).as("V4: previsões do PO Robot").isTrue();
+                assertThat(existe(c, "po_robo_execucoes")).as("V4: execuções do PO Robot").isTrue();
+                assertThat(temColuna(c, "po_robo_regras", "stock_minimo")).as("V4: campos novos da regra").isTrue();
+                assertThat(temColuna(c, "po_robo_regras", "stock_seguranca")).isTrue();
+                assertThat(temColuna(c, "po_robo_regras", "prazo_entrega_dias")).isTrue();
+                assertThat(temColuna(c, "po_robo_regras", "ultima_execucao_em")).isTrue();
             } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }
@@ -133,10 +140,10 @@ class FlywayBaselineTest {
             Flyway flyway = flywayComAConfigDaAplicacao(base);
             var resultado = flyway.migrate(); // com baseline-version 0 isto falhava: "relation ... already exists"
 
-            // A V1 não se repete (a base marca-se como V1); só as migrações seguintes correm — hoje a V2 e a V3.
-            assertThat(resultado.migrationsExecuted).as("só a V2 e a V3 correm sobre um schema existente; a V1 não é reexecutada").isEqualTo(2);
+            // A V1 não se repete (a base marca-se como V1); só as migrações seguintes correm — hoje a V2, a V3 e a V4.
+            assertThat(resultado.migrationsExecuted).as("só a V2, a V3 e a V4 correm sobre um schema existente; a V1 não é reexecutada").isEqualTo(3);
             MigrationInfo actual = flyway.info().current();
-            assertThat(actual.getVersion().getVersion()).isEqualTo("3");
+            assertThat(actual.getVersion().getVersion()).isEqualTo("4");
             assertThat(java.util.Arrays.stream(flyway.info().applied()).filter(m -> "1".equals(m.getVersion().getVersion())).findFirst().orElseThrow().getType().name())
                     .as("a V1 fica apenas como linha de base").isEqualTo("BASELINE");
             try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD); Statement st = c.createStatement();
@@ -144,6 +151,32 @@ class FlywayBaselineTest {
                 assertThat(rs.next()).isTrue();
                 assertThat(rs.getInt(1)).as("os dados existentes ficam intactos").isEqualTo(42);
             } catch (SQLException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+    }
+
+    @Test
+    void aV4AplicaSeSobreUmaBaseNaV3ENaoAlteraAsMigracoesPublicadas() throws Exception {
+        comBaseTemporaria(base -> {
+            var ateV3 = Flyway.configure()
+                    .dataSource(urlDa(base), USER, PASSWORD).locations("classpath:db/migration").target("3").load();
+            assertThat(ateV3.migrate().migrationsExecuted).as("V1, V2 e V3").isEqualTo(3);
+
+            var completo = flywayComAConfigDaAplicacao(base);
+            assertThat(completo.migrate().migrationsExecuted).as("só a V4 corre sobre uma base na V3").isEqualTo(1);
+            assertThat(completo.info().current().getVersion().getVersion()).isEqualTo("4");
+            assertThat(completo.validateWithResult().validationSuccessful).as("V1-V3 continuam com o mesmo checksum registado").isTrue();
+
+            try (Connection c = DriverManager.getConnection(urlDa(base), USER, PASSWORD); Statement st = c.createStatement()) {
+                // Idempotente: voltar a correr o ficheiro da V4 à mão não falha nem duplica nada.
+                st.execute(new String(new ClassPathResource("db/migration/V4__po_robot_propostas.sql").getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+                // No máximo uma proposta pendente por regra é garantido pela base (índice único parcial).
+                try (ResultSet rs = st.executeQuery("SELECT indexdef FROM pg_indexes WHERE indexname = 'po_robo_propostas_regra_pendente_uq'")) {
+                    assertThat(rs.next()).isTrue();
+                    assertThat(rs.getString(1)).contains("UNIQUE").contains("PENDENTE_REVISAO");
+                }
+            } catch (SQLException | IOException e) {
                 throw new IllegalStateException(e);
             }
         });

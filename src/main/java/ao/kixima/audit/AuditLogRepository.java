@@ -23,6 +23,9 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, String>, Jpa
     /** Linha do tempo auditável de uma entidade — poService.getPurchaseOrderHistory. */
     List<AuditLog> findByEntityTypeAndEntityIdOrderByCreatedAtAsc(String entityType, String entityId);
 
+    /** Actividade do PO Robot de UMA empresa (acções dadas), da mais recente para a mais antiga — GET /api/po-robot/actividades. */
+    List<AuditLog> findByCompanyIdAndActionInOrderByCreatedAtDesc(String companyId, java.util.Collection<String> actions, Pageable pageable);
+
     /** dadosPessoaisService.exportar — o rasto do titular (take 1000). */
     List<AuditLog> findByActorIdOrderByCreatedAtDesc(String actorId, Pageable pageable);
 
